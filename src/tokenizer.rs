@@ -117,8 +117,8 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, &str> {
         try_lex!("unit", UnitType);
         try_lex!("true", True);
         try_lex!("false", False);
-        try_lex!("write", Write);
         try_lex!("writeln", Writeln);
+        try_lex!("write", Write);
         try_lex!("and", And);
         try_lex!("or", Or);
         try_lex!("not", Not);

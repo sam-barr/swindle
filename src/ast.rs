@@ -14,7 +14,7 @@ pub enum Statement<ID> {
     Expression(Box<Expression<ID>>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum Type {
     Int(),
     String(),
@@ -77,7 +77,7 @@ pub enum Unary<ID> {
 #[derive(Debug)]
 pub enum Primary<ID> {
     Paren(Box<Expression<ID>>),
-    IntLit(u32),
+    IntLit(u32), // I only parse positive integer btw
     StringLit(String),
     BoolLit(bool),
     Variable(ID),
