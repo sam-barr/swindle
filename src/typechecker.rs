@@ -1,10 +1,19 @@
 #![allow(dead_code)]
 use crate::ast::*;
+use crate::parser::Parsed;
 use std::collections::HashMap;
+
+#[derive(Debug)]
+pub struct Typed {}
+
+impl Tag for Typed {
+    type VariableTag = SwindleType;
+    type WriteTag = SwindleType;
+}
 
 // copy and clone might not work in the future
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-enum SwindleType {
+pub enum SwindleType {
     Int(),
     String(),
     Bool(),
@@ -13,7 +22,7 @@ enum SwindleType {
 
 type TypeMap = HashMap<String, SwindleType>;
 
-pub fn type_program(program: Program<String>) -> Option<Program<String>> {
+pub fn type_program(program: Program<Parsed, String>) -> Option<Program<Typed, String>> {
     let mut types = HashMap::new();
     let mut statements = Vec::new();
     for stmt in program.statements {
@@ -29,8 +38,8 @@ pub fn type_program(program: Program<String>) -> Option<Program<String>> {
 
 fn type_statement(
     types: &mut TypeMap,
-    statement: Statement<String>,
-) -> Option<(Box<Statement<String>>, SwindleType)> {
+    statement: Statement<Parsed, String>,
+) -> Option<(Box<Statement<Typed, String>>, SwindleType)> {
     match statement {
         Statement::Declare(typ, varname, expression) => {
             if types.contains_key(&varname) {
@@ -46,12 +55,11 @@ fn type_statement(
                 })
             }
         }
-        Statement::Write(expression) => {
-            type_expression(types, *expression).map(|(e, t)| (Box::new(Statement::Write(e)), t))
+        Statement::Write((), expression) => {
+            type_expression(types, *expression).map(|(e, t)| (Box::new(Statement::Write(t, e)), t))
         }
-        Statement::Writeln(expression) => {
-            type_expression(types, *expression).map(|(e, t)| (Box::new(Statement::Writeln(e)), t))
-        }
+        Statement::Writeln((), expression) => type_expression(types, *expression)
+            .map(|(e, t)| (Box::new(Statement::Writeln(t, e)), t)),
         Statement::Expression(expression) => type_expression(types, *expression)
             .map(|(e, t)| (Box::new(Statement::Expression(e)), t)),
     }
@@ -69,8 +77,8 @@ fn type_matches_swindle_type(typ: Type, swindle: SwindleType) -> bool {
 
 fn type_expression(
     types: &TypeMap,
-    expression: Expression<String>,
-) -> Option<(Box<Expression<String>>, SwindleType)> {
+    expression: Expression<Parsed, String>,
+) -> Option<(Box<Expression<Typed, String>>, SwindleType)> {
     match expression {
         Expression::Assign(varname, expression) => types.get(&varname).and_then(|tv| {
             type_expression(types, *expression).and_then(|(e, te)| {
@@ -87,7 +95,10 @@ fn type_expression(
     }
 }
 
-fn type_orexp(types: &TypeMap, orexp: OrExp<String>) -> Option<(Box<OrExp<String>>, SwindleType)> {
+fn type_orexp(
+    types: &TypeMap,
+    orexp: OrExp<Parsed, String>,
+) -> Option<(Box<OrExp<Typed, String>>, SwindleType)> {
     match orexp {
         OrExp::Or(andexp, orexp) => type_andexp(types, *andexp).and_then(|(a, ta)| {
             type_orexp(types, *orexp).and_then(|(o, to)| match (ta, to) {
@@ -105,8 +116,8 @@ fn type_orexp(types: &TypeMap, orexp: OrExp<String>) -> Option<(Box<OrExp<String
 
 fn type_andexp(
     types: &TypeMap,
-    andexp: AndExp<String>,
-) -> Option<(Box<AndExp<String>>, SwindleType)> {
+    andexp: AndExp<Parsed, String>,
+) -> Option<(Box<AndExp<Typed, String>>, SwindleType)> {
     match andexp {
         AndExp::And(compexp, andexp) => type_compexp(types, *compexp).and_then(|(c, tc)| {
             type_andexp(types, *andexp).and_then(|(a, ta)| match (tc, ta) {
@@ -124,59 +135,29 @@ fn type_andexp(
 
 fn type_compexp(
     types: &TypeMap,
-    compexp: CompExp<String>,
-) -> Option<(Box<CompExp<String>>, SwindleType)> {
+    compexp: CompExp<Parsed, String>,
+) -> Option<(Box<CompExp<Typed, String>>, SwindleType)> {
     match compexp {
-        CompExp::Leq(addexp1, addexp2) => type_addexp(types, *addexp1).and_then(|(a1, t1)| {
-            type_addexp(types, *addexp2).and_then(|(a2, t2)| match (t1, t2) {
-                (SwindleType::Int(), SwindleType::Int()) => {
-                    Some((Box::new(CompExp::Leq(a1, a2)), SwindleType::Int()))
-                }
-                _ => None,
+        CompExp::Comp(compop, addexp1, addexp2) => {
+            type_addexp(types, *addexp1).and_then(|(a1, t1)| {
+                type_addexp(types, *addexp2).and_then(|(a2, t2)| {
+                    let result = (Box::new(CompExp::Comp(compop, a1, a2)), SwindleType::Bool());
+                    match compop {
+                        CompOp::Eq | CompOp::Neq => {
+                            if t1 == t2 {
+                                Some(result)
+                            } else {
+                                None
+                            }
+                        }
+                        _ => match (t1, t2) {
+                            (SwindleType::Int(), SwindleType::Int()) => Some(result),
+                            _ => None,
+                        },
+                    }
+                })
             })
-        }),
-        CompExp::Lt(addexp1, addexp2) => type_addexp(types, *addexp1).and_then(|(a1, t1)| {
-            type_addexp(types, *addexp2).and_then(|(a2, t2)| match (t1, t2) {
-                (SwindleType::Int(), SwindleType::Int()) => {
-                    Some((Box::new(CompExp::Lt(a1, a2)), SwindleType::Int()))
-                }
-                _ => None,
-            })
-        }),
-        CompExp::Eq(addexp1, addexp2) => type_addexp(types, *addexp1).and_then(|(a1, t1)| {
-            type_addexp(types, *addexp2).and_then(|(a2, t2)| {
-                if t1 == t2 {
-                    Some((Box::new(CompExp::Eq(a1, a2)), SwindleType::Int()))
-                } else {
-                    None
-                }
-            })
-        }),
-        CompExp::Neq(addexp1, addexp2) => type_addexp(types, *addexp1).and_then(|(a1, t1)| {
-            type_addexp(types, *addexp2).and_then(|(a2, t2)| {
-                if t1 == t2 {
-                    Some((Box::new(CompExp::Neq(a1, a2)), SwindleType::Int()))
-                } else {
-                    None
-                }
-            })
-        }),
-        CompExp::Gt(addexp1, addexp2) => type_addexp(types, *addexp1).and_then(|(a1, t1)| {
-            type_addexp(types, *addexp2).and_then(|(a2, t2)| match (t1, t2) {
-                (SwindleType::Int(), SwindleType::Int()) => {
-                    Some((Box::new(CompExp::Gt(a1, a2)), SwindleType::Int()))
-                }
-                _ => None,
-            })
-        }),
-        CompExp::Geq(addexp1, addexp2) => type_addexp(types, *addexp1).and_then(|(a1, t1)| {
-            type_addexp(types, *addexp2).and_then(|(a2, t2)| match (t1, t2) {
-                (SwindleType::Int(), SwindleType::Int()) => {
-                    Some((Box::new(CompExp::Geq(a1, a2)), SwindleType::Int()))
-                }
-                _ => None,
-            })
-        }),
+        }
         CompExp::AddExp(addexp) => {
             type_addexp(types, *addexp).map(|(a, t)| (Box::new(CompExp::AddExp(a)), t))
         }
@@ -185,21 +166,13 @@ fn type_compexp(
 
 fn type_addexp(
     types: &TypeMap,
-    addexp: AddExp<String>,
-) -> Option<(Box<AddExp<String>>, SwindleType)> {
+    addexp: AddExp<Parsed, String>,
+) -> Option<(Box<AddExp<Typed, String>>, SwindleType)> {
     match addexp {
-        AddExp::Sum(mulexp, addexp) => type_mulexp(types, *mulexp).and_then(|(m, tm)| {
+        AddExp::Add(addop, mulexp, addexp) => type_mulexp(types, *mulexp).and_then(|(m, tm)| {
             type_addexp(types, *addexp).and_then(|(a, ta)| match (tm, ta) {
                 (SwindleType::Int(), SwindleType::Int()) => {
-                    Some((Box::new(AddExp::Sum(m, a)), SwindleType::Int()))
-                }
-                _ => None,
-            })
-        }),
-        AddExp::Difference(mulexp, addexp) => type_mulexp(types, *mulexp).and_then(|(m, tm)| {
-            type_addexp(types, *addexp).and_then(|(a, ta)| match (tm, ta) {
-                (SwindleType::Int(), SwindleType::Int()) => {
-                    Some((Box::new(AddExp::Difference(m, a)), SwindleType::Int()))
+                    Some((Box::new(AddExp::Add(addop, m, a)), SwindleType::Int()))
                 }
                 _ => None,
             })
@@ -212,21 +185,13 @@ fn type_addexp(
 
 fn type_mulexp(
     types: &TypeMap,
-    mulexp: MulExp<String>,
-) -> Option<(Box<MulExp<String>>, SwindleType)> {
+    mulexp: MulExp<Parsed, String>,
+) -> Option<(Box<MulExp<Typed, String>>, SwindleType)> {
     match mulexp {
-        MulExp::Product(unary, mulexp) => type_unary(types, *unary).and_then(|(u, tu)| {
+        MulExp::Mul(mulop, unary, mulexp) => type_unary(types, *unary).and_then(|(u, tu)| {
             type_mulexp(types, *mulexp).and_then(|(m, tm)| match (tu, tm) {
                 (SwindleType::Int(), SwindleType::Int()) => {
-                    Some((Box::new(MulExp::Product(u, m)), SwindleType::Int()))
-                }
-                _ => None,
-            })
-        }),
-        MulExp::Quotient(unary, mulexp) => type_unary(types, *unary).and_then(|(u, tu)| {
-            type_mulexp(types, *mulexp).and_then(|(m, tm)| match (tu, tm) {
-                (SwindleType::Int(), SwindleType::Int()) => {
-                    Some((Box::new(MulExp::Quotient(u, m)), SwindleType::Int()))
+                    Some((Box::new(MulExp::Mul(mulop, u, m)), SwindleType::Int()))
                 }
                 _ => None,
             })
@@ -237,7 +202,10 @@ fn type_mulexp(
     }
 }
 
-fn type_unary(types: &TypeMap, unary: Unary<String>) -> Option<(Box<Unary<String>>, SwindleType)> {
+fn type_unary(
+    types: &TypeMap,
+    unary: Unary<Parsed, String>,
+) -> Option<(Box<Unary<Typed, String>>, SwindleType)> {
     match unary {
         Unary::Negate(unary) => type_unary(types, *unary).and_then(|(u, t)| match t {
             SwindleType::Int() => Some((Box::new(Unary::Negate(u)), t)),
@@ -255,8 +223,8 @@ fn type_unary(types: &TypeMap, unary: Unary<String>) -> Option<(Box<Unary<String
 
 fn type_primary(
     types: &TypeMap,
-    primary: Primary<String>,
-) -> Option<(Box<Primary<String>>, SwindleType)> {
+    primary: Primary<Parsed, String>,
+) -> Option<(Box<Primary<Typed, String>>, SwindleType)> {
     match primary {
         Primary::Paren(expression) => {
             type_expression(types, *expression).map(|(e, t)| (Box::new(Primary::Paren(e)), t))
@@ -264,9 +232,9 @@ fn type_primary(
         Primary::IntLit(n) => Some((Box::new(Primary::IntLit(n)), SwindleType::Int())),
         Primary::StringLit(s) => Some((Box::new(Primary::StringLit(s)), SwindleType::String())),
         Primary::BoolLit(b) => Some((Box::new(Primary::BoolLit(b)), SwindleType::Bool())),
-        Primary::Variable(varname) => types
+        Primary::Variable((), varname) => types
             .get(&varname)
-            .map(|&t| (Box::new(Primary::Variable(varname)), t)),
+            .map(|&t| (Box::new(Primary::Variable(t, varname)), t)),
         Primary::Unit() => Some((Box::new(Primary::Unit()), SwindleType::Unit())),
     }
 }

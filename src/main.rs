@@ -3,7 +3,7 @@ use swindle::tokenizer::*;
 use swindle::typechecker::*;
 
 fn main() {
-    let tokens = tokenize("int x = 0; unit y = (); writeln x+y; ");
+    let tokens = tokenize("int x = 0; int y = 2; writeln x+y*x; ");
     let result = parse_program(&tokens.unwrap());
     if let Some(program) = result {
         println!("{:?}", type_program(program));

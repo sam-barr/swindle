@@ -4,9 +4,17 @@ use crate::ast::*;
 use crate::tokenizer::*;
 use std::boxed::Box;
 
+#[derive(Debug)]
+pub struct Parsed {}
+
+impl Tag for Parsed {
+    type VariableTag = ();
+    type WriteTag = ();
+}
+
 type ParserResult<'a, A> = Option<(A, &'a [Token])>;
 
-pub fn parse_program(tokens: &[Token]) -> Option<Program<String>> {
+pub fn parse_program(tokens: &[Token]) -> Option<Program<Parsed, String>> {
     let mut leftover_tokens = tokens;
     let mut statements = Vec::new();
     while let Some((statement, toks)) = parse_statement(leftover_tokens) {
@@ -28,7 +36,7 @@ pub fn parse_program(tokens: &[Token]) -> Option<Program<String>> {
     }
 }
 
-fn parse_statement(tokens: &[Token]) -> ParserResult<Box<Statement<String>>> {
+fn parse_statement(tokens: &[Token]) -> ParserResult<Box<Statement<Parsed, String>>> {
     //println!("statement {:?}", tokens);
     parse_type(tokens)
         .and_then(|(typ, tokens)| {
@@ -49,10 +57,12 @@ fn parse_statement(tokens: &[Token]) -> ParserResult<Box<Statement<String>>> {
         })
         .or_else(|| {
             tokens.split_first().and_then(|(tok, tokens)| match tok {
-                Token::Write() => parse_expression(tokens)
-                    .map(|(expression, tokens)| (Box::new(Statement::Write(expression)), tokens)),
-                Token::Writeln() => parse_expression(tokens)
-                    .map(|(expression, tokens)| (Box::new(Statement::Writeln(expression)), tokens)),
+                Token::Write() => parse_expression(tokens).map(|(expression, tokens)| {
+                    (Box::new(Statement::Write((), expression)), tokens)
+                }),
+                Token::Writeln() => parse_expression(tokens).map(|(expression, tokens)| {
+                    (Box::new(Statement::Writeln((), expression)), tokens)
+                }),
                 _ => None,
             })
         })
@@ -73,7 +83,7 @@ fn parse_type(tokens: &[Token]) -> ParserResult<Type> {
     })
 }
 
-fn parse_expression(tokens: &[Token]) -> ParserResult<Box<Expression<String>>> {
+fn parse_expression(tokens: &[Token]) -> ParserResult<Box<Expression<Parsed, String>>> {
     //println!("expression {:?}", tokens);
     tokens
         .split_first()
@@ -94,7 +104,7 @@ fn parse_expression(tokens: &[Token]) -> ParserResult<Box<Expression<String>>> {
         })
 }
 
-fn parse_orexp(tokens: &[Token]) -> ParserResult<Box<OrExp<String>>> {
+fn parse_orexp(tokens: &[Token]) -> ParserResult<Box<OrExp<Parsed, String>>> {
     //println!("or {:?}", tokens);
     parse_andexp(tokens)
         .and_then(|(andexp, tokens)| {
@@ -111,7 +121,7 @@ fn parse_orexp(tokens: &[Token]) -> ParserResult<Box<OrExp<String>>> {
         })
 }
 
-fn parse_andexp(tokens: &[Token]) -> ParserResult<Box<AndExp<String>>> {
+fn parse_andexp(tokens: &[Token]) -> ParserResult<Box<AndExp<Parsed, String>>> {
     //println!("and {:?}", tokens);
     parse_compexp(tokens)
         .and_then(|(compexp, tokens)| {
@@ -129,77 +139,78 @@ fn parse_andexp(tokens: &[Token]) -> ParserResult<Box<AndExp<String>>> {
         })
 }
 
-fn parse_compexp(tokens: &[Token]) -> ParserResult<Box<CompExp<String>>> {
+fn parse_compexp(tokens: &[Token]) -> ParserResult<Box<CompExp<Parsed, String>>> {
     //println!("comp {:?}", tokens);
     parse_addexp(tokens)
         .and_then(|(addexp1, tokens)| {
-            tokens
-                .split_first()
-                .and_then(|(op_tok, tokens)| match op_tok {
-                    Token::Leq() => parse_addexp(tokens).map(|(addexp2, tokens)| {
-                        (Box::new(CompExp::Leq(addexp1, addexp2)), tokens)
-                    }),
-                    Token::Lt() => parse_addexp(tokens)
-                        .map(|(addexp2, tokens)| (Box::new(CompExp::Lt(addexp1, addexp2)), tokens)),
-                    Token::Eq() => parse_addexp(tokens)
-                        .map(|(addexp2, tokens)| (Box::new(CompExp::Eq(addexp1, addexp2)), tokens)),
-                    Token::Neq() => parse_addexp(tokens).map(|(addexp2, tokens)| {
-                        (Box::new(CompExp::Neq(addexp1, addexp2)), tokens)
-                    }),
-                    Token::Gt() => parse_addexp(tokens)
-                        .map(|(addexp2, tokens)| (Box::new(CompExp::Gt(addexp1, addexp2)), tokens)),
-                    Token::Geq() => parse_addexp(tokens).map(|(addexp2, tokens)| {
-                        (Box::new(CompExp::Geq(addexp1, addexp2)), tokens)
-                    }),
-                    _ => None,
+            parse_compop(tokens).and_then(|(compop, tokens)| {
+                parse_addexp(tokens).map(|(addexp2, tokens)| {
+                    (Box::new(CompExp::Comp(compop, addexp1, addexp2)), tokens)
                 })
+            })
         })
         .or_else(|| {
             parse_addexp(tokens).map(|(addexp, tokens)| (Box::new(CompExp::AddExp(addexp)), tokens))
         })
 }
 
-fn parse_addexp(tokens: &[Token]) -> ParserResult<Box<AddExp<String>>> {
+fn parse_compop(tokens: &[Token]) -> ParserResult<CompOp> {
+    tokens.split_first().and_then(|(tok, tokens)| match tok {
+        Token::Leq() => Some((CompOp::Leq, tokens)),
+        Token::Lt() => Some((CompOp::Lt, tokens)),
+        Token::Eq() => Some((CompOp::Eq, tokens)),
+        Token::Neq() => Some((CompOp::Neq, tokens)),
+        Token::Gt() => Some((CompOp::Gt, tokens)),
+        Token::Geq() => Some((CompOp::Geq, tokens)),
+        _ => None,
+    })
+}
+
+fn parse_addexp(tokens: &[Token]) -> ParserResult<Box<AddExp<Parsed, String>>> {
     //println!("add {:?}", tokens);
     parse_mulexp(tokens)
         .and_then(|(mulexp, tokens)| {
-            tokens
-                .split_first()
-                .and_then(|(op_tok, tokens)| match op_tok {
-                    Token::Sum() => parse_addexp(tokens)
-                        .map(|(addexp, tokens)| (Box::new(AddExp::Sum(mulexp, addexp)), tokens)),
-                    Token::Difference() => parse_addexp(tokens).map(|(addexp, tokens)| {
-                        (Box::new(AddExp::Difference(mulexp, addexp)), tokens)
-                    }),
-                    _ => None,
-                })
+            parse_addop(tokens).and_then(|(addop, tokens)| {
+                parse_addexp(tokens)
+                    .map(|(addexp, tokens)| (Box::new(AddExp::Add(addop, mulexp, addexp)), tokens))
+            })
         })
         .or_else(|| {
             parse_mulexp(tokens).map(|(mulexp, tokens)| (Box::new(AddExp::MulExp(mulexp)), tokens))
         })
 }
 
-fn parse_mulexp(tokens: &[Token]) -> ParserResult<Box<MulExp<String>>> {
+fn parse_addop(tokens: &[Token]) -> ParserResult<AddOp> {
+    tokens.split_first().and_then(|(tok, tokens)| match tok {
+        Token::Sum() => Some((AddOp::Sum, tokens)),
+        Token::Difference() => Some((AddOp::Difference, tokens)),
+        _ => None,
+    })
+}
+
+fn parse_mulexp(tokens: &[Token]) -> ParserResult<Box<MulExp<Parsed, String>>> {
     //println!("mul {:?}", tokens);
     parse_unary(tokens)
         .and_then(|(unary, tokens)| {
-            tokens
-                .split_first()
-                .and_then(|(op_tok, tokens)| match op_tok {
-                    Token::Product() => parse_mulexp(tokens)
-                        .map(|(mulexp, tokens)| (Box::new(MulExp::Product(unary, mulexp)), tokens)),
-                    Token::Quotient() => parse_mulexp(tokens).map(|(mulexp, tokens)| {
-                        (Box::new(MulExp::Quotient(unary, mulexp)), tokens)
-                    }),
-                    _ => None,
-                })
+            parse_mulop(tokens).and_then(|(mulop, tokens)| {
+                parse_mulexp(tokens)
+                    .map(|(mulexp, tokens)| (Box::new(MulExp::Mul(mulop, unary, mulexp)), tokens))
+            })
         })
         .or_else(|| {
             parse_unary(tokens).map(|(unary, tokens)| (Box::new(MulExp::Unary(unary)), tokens))
         })
 }
 
-fn parse_unary(tokens: &[Token]) -> ParserResult<Box<Unary<String>>> {
+fn parse_mulop(tokens: &[Token]) -> ParserResult<MulOp> {
+    tokens.split_first().and_then(|(tok, tokens)| match tok {
+        Token::Product() => Some((MulOp::Product, tokens)),
+        Token::Quotient() => Some((MulOp::Quotient, tokens)),
+        _ => None,
+    })
+}
+
+fn parse_unary(tokens: &[Token]) -> ParserResult<Box<Unary<Parsed, String>>> {
     //println!("unary {:?}", tokens);
     tokens
         .split_first()
@@ -218,7 +229,7 @@ fn parse_unary(tokens: &[Token]) -> ParserResult<Box<Unary<String>>> {
         })
 }
 
-fn parse_primary(tokens: &[Token]) -> ParserResult<Box<Primary<String>>> {
+fn parse_primary(tokens: &[Token]) -> ParserResult<Box<Primary<Parsed, String>>> {
     //println!("primary {:?}", tokens);
     tokens.split_first().and_then(|(tok, tokens)| {
         macro_rules! mk {
@@ -233,7 +244,7 @@ fn parse_primary(tokens: &[Token]) -> ParserResult<Box<Primary<String>>> {
             Token::True() => mk!(Primary::BoolLit(true)),
             Token::False() => mk!(Primary::BoolLit(false)),
             Token::StringLit(s) => mk!(Primary::StringLit(s.to_string())),
-            Token::Variable(v) => mk!(Primary::Variable(v.to_string())),
+            Token::Variable(v) => mk!(Primary::Variable((), v.to_string())),
             Token::LParen() => parse_expression(tokens)
                 .and_then(|(expression, tokens)| {
                     tokens.split_first().and_then(|(tok, tokens)| match tok {
