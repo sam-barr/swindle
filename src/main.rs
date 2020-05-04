@@ -13,20 +13,25 @@ fn main() {
     writeln x;
     writeln y;
     y = x + y;
-    writeln (2 * x) + y * y;";
+    writeln (2 * x) + y * y;
+    string a = \"Hi\";
+    string b = \"Hi\";
+    string c = \"Bye\";
+    writeln a == b;
+    writeln b == c;
+    writeln not true;";
 
     let result = tokenize(code)
-        .ok()
         .and_then(|tokens| parse_program(&tokens))
         .and_then(type_program);
 
-    if let Some(program) = result {
-        let (program, _num_variables) = rename_program(program);
-        let (bytecode, strings) = byte_program(program);
-
-        run(&bytecode, strings);
-    } else {
-        println!("nope");
+    match result {
+        Ok(program) => {
+            let (program, _num_variables) = rename_program(program);
+            let (bytecode, strings) = byte_program(program);
+            run(&bytecode, strings);
+        }
+        Err(e) => println!("{}", e),
     }
 }
 

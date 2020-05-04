@@ -26,8 +26,8 @@ pub fn rename_program(program: Program<Typed, String>) -> (Program<Typed, UID>, 
     let mut name_table = HashMap::new();
     let mut statements = Vec::new();
 
-    for stmt in program.statements {
-        statements.push(rename_statement(&mut next_id, &mut name_table, *stmt));
+    for ((), stmt) in program.statements {
+        statements.push(((), rename_statement(&mut next_id, &mut name_table, *stmt)));
     }
 
     (Program { statements }, next_id.0)

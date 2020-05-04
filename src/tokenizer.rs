@@ -1,7 +1,8 @@
+use crate::error::*;
 use std::convert::TryFrom;
 use std::str::Chars;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Token {
     // literals
     IntLit(i32),
@@ -38,28 +39,51 @@ pub enum Token {
     Not,
 }
 
-struct PushableChars<'a> {
+#[derive(Debug, Clone)]
+pub struct PosnToken {
+    pub token: Token,
+    pub file_posn: FilePosition,
+}
+
+impl PosnToken {
+    pub fn new(token: Token, file_posn: FilePosition) -> Self {
+        PosnToken { token, file_posn }
+    }
+}
+
+struct TokenizerState<'a> {
+    file_posn: FilePosition,
     chars: Chars<'a>,
     buffer: Vec<char>,
 }
 
 // TODO: depending on how things go, the buffer could be optimized to Option<Char>
-impl<'a> PushableChars<'a> {
+impl<'a> TokenizerState<'a> {
     fn new(string: &'a str) -> Self {
-        PushableChars {
+        TokenizerState {
+            file_posn: FilePosition::new(),
             chars: string.chars(),
             buffer: Vec::new(),
         }
     }
 
     fn next(&mut self) -> Option<char> {
-        self.buffer.pop().or_else(|| self.chars.next())
-        //let c = self.buffer.pop().or_else(|| self.chars.next());
-        //println!("{:?}", c);
-        //c
+        let c = self.buffer.pop().or_else(|| self.chars.next());
+        match c {
+            Some('\n') => {
+                self.file_posn.line += 1;
+                self.file_posn.column = 0;
+            }
+            Some(_) => self.file_posn.column += 1,
+            None => {}
+        }
+
+        c
     }
 
     fn push(&mut self, c: char) {
+        // This is really naive and could crash at some point
+        self.file_posn.column -= 1;
         self.buffer.push(c);
     }
 
@@ -73,7 +97,7 @@ impl<'a> PushableChars<'a> {
     }
 }
 
-fn try_lex_keyword<F>(word: &str, chars: &mut PushableChars, f: F) -> Option<Token>
+fn try_lex_keyword<F>(word: &str, chars: &mut TokenizerState, f: F) -> Option<Token>
 where
     F: FnOnce() -> Token,
 {
@@ -98,14 +122,16 @@ where
     Some(f())
 }
 
-pub fn tokenize(source: &str) -> Result<Vec<Token>, &str> {
-    let mut chars = PushableChars::new(source);
+pub fn tokenize(source: &str) -> Result<Vec<PosnToken>, SwindleError> {
+    let mut chars = TokenizerState::new(source);
     let mut tokens = Vec::new();
 
     macro_rules! try_lex {
         ($string:expr, $result:ident) => {
+            let posn = chars.file_posn;
             if let Some(t) = try_lex_keyword($string, &mut chars, || Token::$result) {
-                tokens.push(t);
+                tokens.push(PosnToken::new(t, posn));
+                continue;
             }
         };
     }
@@ -127,33 +153,33 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, &str> {
         try_lex!("!=", Neq);
         try_lex!(">=", Geq);
         try_lex!("<=", Leq);
-        chars.skip_whitespace();
 
+        let posn = chars.file_posn;
         let c = match chars.next() {
             Some(c) => c,
             None => break,
         };
 
         if c == '/' {
-            tokens.push(Token::Quotient);
+            tokens.push(PosnToken::new(Token::Quotient, posn));
         } else if c == '*' {
-            tokens.push(Token::Product);
+            tokens.push(PosnToken::new(Token::Product, posn));
         } else if c == '-' {
-            tokens.push(Token::Difference);
+            tokens.push(PosnToken::new(Token::Difference, posn));
         } else if c == '+' {
-            tokens.push(Token::Sum);
+            tokens.push(PosnToken::new(Token::Sum, posn));
         } else if c == '<' {
-            tokens.push(Token::Lt);
+            tokens.push(PosnToken::new(Token::Lt, posn));
         } else if c == '>' {
-            tokens.push(Token::Gt);
+            tokens.push(PosnToken::new(Token::Gt, posn));
         } else if c == '=' {
-            tokens.push(Token::Assign);
+            tokens.push(PosnToken::new(Token::Assign, posn));
         } else if c == ';' {
-            tokens.push(Token::Semicolon);
+            tokens.push(PosnToken::new(Token::Semicolon, posn));
         } else if c == '(' {
-            tokens.push(Token::LParen);
+            tokens.push(PosnToken::new(Token::LParen, posn));
         } else if c == ')' {
-            tokens.push(Token::RParen);
+            tokens.push(PosnToken::new(Token::RParen, posn));
         } else if let Some(mut num) = c.to_digit(10) {
             while let Some(digit) = chars.next() {
                 if let Some(digit) = digit.to_digit(10) {
@@ -164,8 +190,14 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, &str> {
                 }
             }
             match i32::try_from(num) {
-                Ok(num) => tokens.push(Token::IntLit(num)),
-                Err(_) => return Err("that int is too big"),
+                Ok(num) => tokens.push(PosnToken::new(Token::IntLit(num), posn)),
+                Err(_) => {
+                    return Err(SwindleError {
+                        message: "integer literal is too large".to_string(),
+                        file_posn: posn,
+                        error_type: ErrorType::Tokenizer,
+                    })
+                }
             }
         } else if c == '"' {
             let mut string = String::new();
@@ -185,21 +217,25 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, &str> {
                 }
             }
             if finished_string {
-                tokens.push(Token::StringLit(string));
+                tokens.push(PosnToken::new(Token::StringLit(string), posn));
             } else {
-                return Err("Unexpected EOF while parsing string literal");
+                return Err(SwindleError {
+                    message: "unexpected EOF while parsing string literal".to_string(),
+                    file_posn: posn,
+                    error_type: ErrorType::Tokenizer,
+                });
             }
         } else if c.is_ascii_alphabetic() {
             let mut varname = c.to_string();
             while let Some(c2) = chars.next() {
                 if c2.is_ascii_alphanumeric() {
-                    varname.push(c);
+                    varname.push(c2);
                 } else {
                     chars.push(c2);
                     break;
                 }
             }
-            tokens.push(Token::Variable(varname));
+            tokens.push(PosnToken::new(Token::Variable(varname), posn));
         } else {
             chars.push(c);
         }

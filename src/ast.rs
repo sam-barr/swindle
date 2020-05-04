@@ -4,6 +4,7 @@ use std::boxed::Box;
 pub trait Tag {
     type VariableTag: core::fmt::Debug;
     type WriteTag: core::fmt::Debug;
+    type StatementTag: core::fmt::Debug;
 }
 
 #[derive(Debug)]
@@ -11,7 +12,7 @@ pub struct Program<T, ID>
 where
     T: Tag,
 {
-    pub statements: Vec<Box<Statement<T, ID>>>,
+    pub statements: Vec<(T::StatementTag, Box<Statement<T, ID>>)>,
 }
 
 #[derive(Debug)]

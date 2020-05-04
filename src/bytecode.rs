@@ -73,7 +73,7 @@ impl StringTable {
 pub fn byte_program(program: Program<Typed, UID>) -> (Vec<ByteCodeOp>, HashMap<UID, String>) {
     let mut strings = StringTable::new();
     let mut bytecode = Vec::new();
-    for stmt in program.statements {
+    for ((), stmt) in program.statements {
         bytecode.append(&mut byte_statement(&mut strings, *stmt));
     }
 
