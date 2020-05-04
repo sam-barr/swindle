@@ -20,7 +20,7 @@ pub fn parse_program(tokens: &[Token]) -> Option<Program<Parsed, String>> {
     while let Some((statement, toks)) = parse_statement(leftover_tokens) {
         statements.push(statement);
         match toks.split_first() {
-            Some((Token::Semicolon(), toks)) => leftover_tokens = toks,
+            Some((Token::Semicolon, toks)) => leftover_tokens = toks,
             None => {
                 leftover_tokens = toks;
                 break;
@@ -43,7 +43,7 @@ fn parse_statement(tokens: &[Token]) -> ParserResult<Box<Statement<Parsed, Strin
             tokens.split_first().and_then(|(tok, tokens)| match tok {
                 Token::Variable(varname) => {
                     tokens.split_first().and_then(|(tok, tokens)| match tok {
-                        Token::Assign() => parse_expression(tokens).map(|(expression, tokens)| {
+                        Token::Assign => parse_expression(tokens).map(|(expression, tokens)| {
                             (
                                 Box::new(Statement::Declare(typ, varname.to_string(), expression)),
                                 tokens,
@@ -57,10 +57,10 @@ fn parse_statement(tokens: &[Token]) -> ParserResult<Box<Statement<Parsed, Strin
         })
         .or_else(|| {
             tokens.split_first().and_then(|(tok, tokens)| match tok {
-                Token::Write() => parse_expression(tokens).map(|(expression, tokens)| {
+                Token::Write => parse_expression(tokens).map(|(expression, tokens)| {
                     (Box::new(Statement::Write((), expression)), tokens)
                 }),
-                Token::Writeln() => parse_expression(tokens).map(|(expression, tokens)| {
+                Token::Writeln => parse_expression(tokens).map(|(expression, tokens)| {
                     (Box::new(Statement::Writeln((), expression)), tokens)
                 }),
                 _ => None,
@@ -75,10 +75,10 @@ fn parse_statement(tokens: &[Token]) -> ParserResult<Box<Statement<Parsed, Strin
 fn parse_type(tokens: &[Token]) -> ParserResult<Type> {
     //println!("type {:?}", tokens);
     tokens.split_first().and_then(|(tok, tokens)| match tok {
-        Token::IntType() => Some((Type::Int(), tokens)),
-        Token::StringType() => Some((Type::String(), tokens)),
-        Token::BoolType() => Some((Type::Bool(), tokens)),
-        Token::UnitType() => Some((Type::Unit(), tokens)),
+        Token::IntType => Some((Type::Int(), tokens)),
+        Token::StringType => Some((Type::String(), tokens)),
+        Token::BoolType => Some((Type::Bool(), tokens)),
+        Token::UnitType => Some((Type::Unit(), tokens)),
         _ => None,
     })
 }
@@ -89,7 +89,7 @@ fn parse_expression(tokens: &[Token]) -> ParserResult<Box<Expression<Parsed, Str
         .split_first()
         .and_then(|(tok, tokens)| match tok {
             Token::Variable(varname) => tokens.split_first().and_then(|(tok, tokens)| match tok {
-                Token::Assign() => parse_expression(tokens).map(|(expression, tokens)| {
+                Token::Assign => parse_expression(tokens).map(|(expression, tokens)| {
                     (
                         Box::new(Expression::Assign(varname.to_string(), expression)),
                         tokens,
@@ -111,7 +111,7 @@ fn parse_orexp(tokens: &[Token]) -> ParserResult<Box<OrExp<Parsed, String>>> {
             tokens
                 .split_first()
                 .and_then(|(op_tok, tokens)| match op_tok {
-                    Token::Or() => parse_orexp(tokens)
+                    Token::Or => parse_orexp(tokens)
                         .map(|(orexp, tokens)| (Box::new(OrExp::Or(andexp, orexp)), tokens)),
                     _ => None,
                 })
@@ -128,7 +128,7 @@ fn parse_andexp(tokens: &[Token]) -> ParserResult<Box<AndExp<Parsed, String>>> {
             tokens
                 .split_first()
                 .and_then(|(op_tok, tokens)| match op_tok {
-                    Token::And() => parse_andexp(tokens)
+                    Token::And => parse_andexp(tokens)
                         .map(|(andexp, tokens)| (Box::new(AndExp::And(compexp, andexp)), tokens)),
                     _ => None,
                 })
@@ -156,12 +156,12 @@ fn parse_compexp(tokens: &[Token]) -> ParserResult<Box<CompExp<Parsed, String>>>
 
 fn parse_compop(tokens: &[Token]) -> ParserResult<CompOp> {
     tokens.split_first().and_then(|(tok, tokens)| match tok {
-        Token::Leq() => Some((CompOp::Leq, tokens)),
-        Token::Lt() => Some((CompOp::Lt, tokens)),
-        Token::Eq() => Some((CompOp::Eq, tokens)),
-        Token::Neq() => Some((CompOp::Neq, tokens)),
-        Token::Gt() => Some((CompOp::Gt, tokens)),
-        Token::Geq() => Some((CompOp::Geq, tokens)),
+        Token::Leq => Some((CompOp::Leq, tokens)),
+        Token::Lt => Some((CompOp::Lt, tokens)),
+        Token::Eq => Some((CompOp::Eq, tokens)),
+        Token::Neq => Some((CompOp::Neq, tokens)),
+        Token::Gt => Some((CompOp::Gt, tokens)),
+        Token::Geq => Some((CompOp::Geq, tokens)),
         _ => None,
     })
 }
@@ -182,8 +182,8 @@ fn parse_addexp(tokens: &[Token]) -> ParserResult<Box<AddExp<Parsed, String>>> {
 
 fn parse_addop(tokens: &[Token]) -> ParserResult<AddOp> {
     tokens.split_first().and_then(|(tok, tokens)| match tok {
-        Token::Sum() => Some((AddOp::Sum, tokens)),
-        Token::Difference() => Some((AddOp::Difference, tokens)),
+        Token::Sum => Some((AddOp::Sum, tokens)),
+        Token::Difference => Some((AddOp::Difference, tokens)),
         _ => None,
     })
 }
@@ -204,8 +204,8 @@ fn parse_mulexp(tokens: &[Token]) -> ParserResult<Box<MulExp<Parsed, String>>> {
 
 fn parse_mulop(tokens: &[Token]) -> ParserResult<MulOp> {
     tokens.split_first().and_then(|(tok, tokens)| match tok {
-        Token::Product() => Some((MulOp::Product, tokens)),
-        Token::Quotient() => Some((MulOp::Quotient, tokens)),
+        Token::Product => Some((MulOp::Product, tokens)),
+        Token::Quotient => Some((MulOp::Quotient, tokens)),
         _ => None,
     })
 }
@@ -215,10 +215,10 @@ fn parse_unary(tokens: &[Token]) -> ParserResult<Box<Unary<Parsed, String>>> {
     tokens
         .split_first()
         .and_then(|(tok, tokens)| match tok {
-            Token::Difference() => {
+            Token::Difference => {
                 parse_unary(tokens).map(|(unary, tokens)| (Box::new(Unary::Negate(unary)), tokens))
             }
-            Token::Not() => {
+            Token::Not => {
                 parse_unary(tokens).map(|(unary, tokens)| (Box::new(Unary::Not(unary)), tokens))
             }
             _ => None,
@@ -241,20 +241,20 @@ fn parse_primary(tokens: &[Token]) -> ParserResult<Box<Primary<Parsed, String>>>
         match tok {
             //Token::IntLit(n) => Some((Box<Primary::IntLit(*n)>, tokens)),
             Token::IntLit(n) => mk!(Primary::IntLit(*n)),
-            Token::True() => mk!(Primary::BoolLit(true)),
-            Token::False() => mk!(Primary::BoolLit(false)),
+            Token::True => mk!(Primary::BoolLit(true)),
+            Token::False => mk!(Primary::BoolLit(false)),
             Token::StringLit(s) => mk!(Primary::StringLit(s.to_string())),
             Token::Variable(v) => mk!(Primary::Variable((), v.to_string())),
-            Token::LParen() => parse_expression(tokens)
+            Token::LParen => parse_expression(tokens)
                 .and_then(|(expression, tokens)| {
                     tokens.split_first().and_then(|(tok, tokens)| match tok {
-                        Token::RParen() => Some((Box::new(Primary::Paren(expression)), tokens)),
+                        Token::RParen => Some((Box::new(Primary::Paren(expression)), tokens)),
                         _ => None,
                     })
                 })
                 .or_else(|| {
                     tokens.split_first().and_then(|(tok, tokens)| match tok {
-                        Token::RParen() => Some((Box::new(Primary::Unit()), tokens)),
+                        Token::RParen => Some((Box::new(Primary::Unit()), tokens)),
                         _ => None,
                     })
                 }),

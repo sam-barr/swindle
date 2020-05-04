@@ -127,7 +127,7 @@ where
     T: Tag,
 {
     Paren(Box<Expression<T, ID>>),
-    IntLit(u32), // I only parse positive integer btw
+    IntLit(i32), // I only parse positive integer btw
     StringLit(String),
     BoolLit(bool),
     Variable(T::VariableTag, ID),

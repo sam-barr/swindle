@@ -1,40 +1,41 @@
+use std::convert::TryFrom;
 use std::str::Chars;
 
 #[derive(Debug, Clone)]
 pub enum Token {
     // literals
-    IntLit(u32),
+    IntLit(i32),
     StringLit(String),
     Variable(String),
-    LParen(),
-    RParen(),
+    LParen,
+    RParen,
 
     // operands
-    Quotient(),
-    Product(),
-    Difference(),
-    Sum(),
-    Leq(),
-    Lt(),
-    Eq(),
-    Neq(),
-    Gt(),
-    Geq(),
-    Assign(),
-    Semicolon(),
+    Quotient,
+    Product,
+    Difference,
+    Sum,
+    Leq,
+    Lt,
+    Eq,
+    Neq,
+    Gt,
+    Geq,
+    Assign,
+    Semicolon,
 
     // Keywords
-    IntType(),
-    StringType(),
-    BoolType(),
-    UnitType(),
-    True(),
-    False(),
-    Write(),
-    Writeln(),
-    And(),
-    Or(),
-    Not(),
+    IntType,
+    StringType,
+    BoolType,
+    UnitType,
+    True,
+    False,
+    Write,
+    Writeln,
+    And,
+    Or,
+    Not,
 }
 
 struct PushableChars<'a> {
@@ -103,7 +104,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, &str> {
 
     macro_rules! try_lex {
         ($string:expr, $result:ident) => {
-            if let Some(t) = try_lex_keyword($string, &mut chars, Token::$result) {
+            if let Some(t) = try_lex_keyword($string, &mut chars, || Token::$result) {
                 tokens.push(t);
             }
         };
@@ -134,25 +135,25 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, &str> {
         };
 
         if c == '/' {
-            tokens.push(Token::Quotient());
+            tokens.push(Token::Quotient);
         } else if c == '*' {
-            tokens.push(Token::Product());
+            tokens.push(Token::Product);
         } else if c == '-' {
-            tokens.push(Token::Difference());
+            tokens.push(Token::Difference);
         } else if c == '+' {
-            tokens.push(Token::Sum());
+            tokens.push(Token::Sum);
         } else if c == '<' {
-            tokens.push(Token::Lt());
+            tokens.push(Token::Lt);
         } else if c == '>' {
-            tokens.push(Token::Gt());
+            tokens.push(Token::Gt);
         } else if c == '=' {
-            tokens.push(Token::Assign());
+            tokens.push(Token::Assign);
         } else if c == ';' {
-            tokens.push(Token::Semicolon());
+            tokens.push(Token::Semicolon);
         } else if c == '(' {
-            tokens.push(Token::LParen());
+            tokens.push(Token::LParen);
         } else if c == ')' {
-            tokens.push(Token::RParen());
+            tokens.push(Token::RParen);
         } else if let Some(mut num) = c.to_digit(10) {
             while let Some(digit) = chars.next() {
                 if let Some(digit) = digit.to_digit(10) {
@@ -162,7 +163,10 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, &str> {
                     break;
                 }
             }
-            tokens.push(Token::IntLit(num));
+            match i32::try_from(num) {
+                Ok(num) => tokens.push(Token::IntLit(num)),
+                Err(_) => return Err("that int is too big"),
+            }
         } else if c == '"' {
             let mut string = String::new();
             let mut finished_string = false;
