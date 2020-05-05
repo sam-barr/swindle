@@ -4,6 +4,8 @@ use crate::renamer::UID;
 use crate::typechecker::Typed;
 use std::collections::HashMap;
 
+// TODO: idea: clear stack once a statement terminates
+
 #[derive(Debug, Copy, Clone)]
 pub enum ByteCodeOp {
     // Primary
@@ -73,8 +75,8 @@ impl StringTable {
 pub fn byte_program(program: Program<Typed, UID>) -> (Vec<ByteCodeOp>, HashMap<UID, String>) {
     let mut strings = StringTable::new();
     let mut bytecode = Vec::new();
-    for ((), stmt) in program.statements {
-        bytecode.append(&mut byte_statement(&mut strings, *stmt));
+    for tagged_stmt in program.statements {
+        bytecode.append(&mut byte_statement(&mut strings, tagged_stmt.statement));
     }
 
     let mut string_map = HashMap::new();
@@ -122,6 +124,7 @@ fn byte_expression(
             bc.push(ByteCodeOp::UID(uid));
             bc
         }
+        Expression::IfExp(_) => unimplemented!(),
         Expression::OrExp(orexp) => byte_orexp(strings, *orexp),
     }
 }

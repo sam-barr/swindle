@@ -26,8 +26,11 @@ pub fn rename_program(program: Program<Typed, String>) -> (Program<Typed, UID>, 
     let mut name_table = HashMap::new();
     let mut statements = Vec::new();
 
-    for ((), stmt) in program.statements {
-        statements.push(((), rename_statement(&mut next_id, &mut name_table, *stmt)));
+    for tagged_stmt in program.statements {
+        statements.push(TaggedStatement::new(
+            (),
+            rename_statement(&mut next_id, &mut name_table, tagged_stmt.statement),
+        ));
     }
 
     (Program { statements }, next_id.0)
@@ -37,8 +40,8 @@ fn rename_statement(
     next_id: &mut UID,
     name_table: &mut NameTable,
     statement: Statement<Typed, String>,
-) -> Box<Statement<Typed, UID>> {
-    Box::new(match statement {
+) -> Statement<Typed, UID> {
+    match statement {
         Statement::Declare(typ, varname, expression) => {
             let expression = rename_expression(name_table, *expression);
             name_table.insert(varname, *next_id);
@@ -55,7 +58,7 @@ fn rename_statement(
         Statement::Expression(expression) => {
             Statement::Expression(rename_expression(name_table, *expression))
         }
-    })
+    }
 }
 
 fn rename_expression(
@@ -67,6 +70,7 @@ fn rename_expression(
             *name_table.get(&varname).unwrap(),
             rename_expression(name_table, *expression),
         ),
+        Expression::IfExp(_) => unimplemented!(),
         Expression::OrExp(orexp) => Expression::OrExp(rename_orexp(name_table, *orexp)),
     })
 }

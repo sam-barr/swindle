@@ -4,6 +4,7 @@ use crate::ast::*;
 use crate::error::*;
 use crate::tokenizer::*;
 use std::boxed::Box;
+use std::default::Default;
 
 #[derive(Debug)]
 pub struct Parsed {}
@@ -35,42 +36,60 @@ fn item<'a>(tokens: &'a [PosnToken]) -> ParserResult<'a, &PosnToken> {
     }
 }
 
+fn token_lit<'a>(tokens: &'a [PosnToken], expected: Token) -> ParserResult<'a, &PosnToken> {
+    match item(tokens) {
+        Ok((tok, tokens)) => {
+            if tok.token == expected {
+                Ok((tok, tokens))
+            } else {
+                throw_error(
+                    format!("expected {:?}, found {:?}", expected, tok.token),
+                    tok.file_posn,
+                )
+            }
+        }
+        err => err,
+    }
+}
+
+fn many0<'a, A, P>(tokens: &'a [PosnToken], parser: P) -> ParserResult<'a, Vec<A>>
+where
+    P: Fn(&'a [PosnToken]) -> ParserResult<'a, A>,
+{
+    let mut tokens = tokens;
+    let mut collected = Vec::new();
+
+    loop {
+        match parser(tokens) {
+            Ok((a, toks)) => {
+                tokens = toks;
+                collected.push(a);
+            }
+            Err(_) => return Ok((collected, tokens)),
+        }
+    }
+}
+
 pub fn parse_program(tokens: &[PosnToken]) -> Result<Program<Parsed, String>, SwindleError> {
     let mut leftover_tokens = tokens;
     let mut statements = Vec::new();
 
     loop {
-        if leftover_tokens.is_empty() {
-            break;
-        }
-
+        // don't use many because error handling is different
         match parse_statement(leftover_tokens) {
             Ok((statement, tokens)) => {
-                statements.push((leftover_tokens[0].file_posn, statement));
-                match item(tokens) {
-                    Ok((
-                        PosnToken {
-                            token: Token::Semicolon,
-                            file_posn: _,
-                        },
-                        tokens,
-                    )) => leftover_tokens = tokens,
-                    Ok((token, _)) => {
-                        return Err(SwindleError {
-                            message: "expected semicolon".to_string(),
-                            file_posn: token.file_posn,
-                            error_type: ErrorType::Parser,
-                        })
-                    }
-                    Err(_) => {
-                        leftover_tokens = tokens;
-                        break;
-                    }
-                }
+                statements.push(TaggedStatement::new(
+                    leftover_tokens[0].file_posn,
+                    statement,
+                ));
+                leftover_tokens = tokens;
             }
             Err(e) => {
+                // if its empty, that'll casue an error, but we don't want to die from that
                 if !leftover_tokens.is_empty() {
                     return Err(e);
+                } else {
+                    break;
                 }
             }
         }
@@ -86,20 +105,18 @@ pub fn parse_program(tokens: &[PosnToken]) -> Result<Program<Parsed, String>, Sw
     }
 }
 
-fn parse_statement(tokens: &[PosnToken]) -> ParserResult<Box<Statement<Parsed, String>>> {
-    //println!("statement {:?}", tokens);
+fn parse_statement(tokens: &[PosnToken]) -> ParserResult<Statement<Parsed, String>> {
     parse_type(tokens)
         .and_then(|(typ, tokens)| {
             item(tokens).and_then(|(tok, tokens)| match &tok.token {
                 Token::Variable(varname) => {
-                    item(tokens).and_then(|(tok, tokens)| match tok.token {
-                        Token::Assign => parse_expression(tokens).map(|(expression, tokens)| {
+                    token_lit(tokens, Token::Assign).and_then(|(_, tokens)| {
+                        parse_expression(tokens).map(|(expression, tokens)| {
                             (
-                                Box::new(Statement::Declare(typ, varname.to_string(), expression)),
+                                Statement::Declare(typ, varname.to_string(), expression),
                                 tokens,
                             )
-                        }),
-                        _ => bad_token(tok),
+                        })
                     })
                 }
                 _ => bad_token(tok),
@@ -107,18 +124,19 @@ fn parse_statement(tokens: &[PosnToken]) -> ParserResult<Box<Statement<Parsed, S
         })
         .or_else(|_| {
             item(tokens).and_then(|(tok, tokens)| match tok.token {
-                Token::Write => parse_expression(tokens).map(|(expression, tokens)| {
-                    (Box::new(Statement::Write((), expression)), tokens)
-                }),
-                Token::Writeln => parse_expression(tokens).map(|(expression, tokens)| {
-                    (Box::new(Statement::Writeln((), expression)), tokens)
-                }),
+                Token::Write => parse_expression(tokens)
+                    .map(|(expression, tokens)| (Statement::Write((), expression), tokens)),
+                Token::Writeln => parse_expression(tokens)
+                    .map(|(expression, tokens)| (Statement::Writeln((), expression), tokens)),
                 _ => bad_token(tok),
             })
         })
         .or_else(|_| {
             parse_expression(tokens)
-                .map(|(expression, tokens)| (Box::new(Statement::Expression(expression)), tokens))
+                .map(|(expression, tokens)| (Statement::Expression(expression), tokens))
+        })
+        .and_then(|(stmt, tokens)| {
+            token_lit(tokens, Token::Semicolon).map(|(_, tokens)| (stmt, tokens))
         })
 }
 
@@ -128,7 +146,7 @@ fn parse_type(tokens: &[PosnToken]) -> ParserResult<Type> {
         Token::IntType => Ok((Type::Int(), tokens)),
         Token::StringType => Ok((Type::String(), tokens)),
         Token::BoolType => Ok((Type::Bool(), tokens)),
-        Token::UnitType => Ok((Type::Unit(), tokens)),
+        Token::Unit => Ok((Type::Unit(), tokens)),
         _ => bad_token(tok),
     })
 }
@@ -149,18 +167,59 @@ fn parse_expression(tokens: &[PosnToken]) -> ParserResult<Box<Expression<Parsed,
             _ => bad_token(tok),
         })
         .or_else(|_| {
+            parse_ifexp(tokens).map(|(ifexp, tokens)| (Box::new(Expression::IfExp(ifexp)), tokens))
+        })
+        .or_else(|_| {
             parse_orexp(tokens).map(|(orexp, tokens)| (Box::new(Expression::OrExp(orexp)), tokens))
         })
+}
+
+fn parse_ifexp(tokens: &[PosnToken]) -> ParserResult<Box<IfExp<Parsed, String>>> {
+    token_lit(tokens, Token::If).and_then(|(_, tokens)| {
+        parse_expression(tokens).and_then(|(cond, tokens)| {
+            parse_body(tokens).and_then(|(body, tokens)| {
+                many0(tokens, parse_elif).and_then(|(elifs, tokens)| {
+                    let (els, tokens) = token_lit(tokens, Token::Else)
+                        .and_then(|(_, tokens)| parse_body(tokens))
+                        .unwrap_or_else(|_| (Default::default(), tokens));
+                    Ok((
+                        Box::new(IfExp {
+                            cond,
+                            body,
+                            elifs,
+                            els,
+                        }),
+                        tokens,
+                    ))
+                })
+            })
+        })
+    })
+}
+
+fn parse_body(tokens: &[PosnToken]) -> ParserResult<Body<Parsed, String>> {
+    token_lit(tokens, Token::LBrace).and_then(|(_, tokens)| {
+        many0(tokens, parse_statement).and_then(|(statements, tokens)| {
+            token_lit(tokens, Token::RBrace).map(|(_, tokens)| (Body { statements }, tokens))
+        })
+    })
+}
+
+fn parse_elif(tokens: &[PosnToken]) -> ParserResult<Elif<Parsed, String>> {
+    token_lit(tokens, Token::Elif).and_then(|(_, tokens)| {
+        parse_expression(tokens).and_then(|(cond, tokens)| {
+            parse_body(tokens).map(|(body, tokens)| (Elif { cond, body }, tokens))
+        })
+    })
 }
 
 fn parse_orexp(tokens: &[PosnToken]) -> ParserResult<Box<OrExp<Parsed, String>>> {
     //println!("or {:?}", tokens);
     parse_andexp(tokens)
         .and_then(|(andexp, tokens)| {
-            item(tokens).and_then(|(op_tok, tokens)| match op_tok.token {
-                Token::Or => parse_orexp(tokens)
-                    .map(|(orexp, tokens)| (Box::new(OrExp::Or(andexp, orexp)), tokens)),
-                _ => bad_token(op_tok),
+            token_lit(tokens, Token::Or).and_then(|(_, tokens)| {
+                parse_orexp(tokens)
+                    .map(|(orexp, tokens)| (Box::new(OrExp::Or(andexp, orexp)), tokens))
             })
         })
         .or_else(|_| {
@@ -172,10 +231,9 @@ fn parse_andexp(tokens: &[PosnToken]) -> ParserResult<Box<AndExp<Parsed, String>
     //println!("and {:?}", tokens);
     parse_compexp(tokens)
         .and_then(|(compexp, tokens)| {
-            item(tokens).and_then(|(op_tok, tokens)| match op_tok.token {
-                Token::And => parse_andexp(tokens)
-                    .map(|(andexp, tokens)| (Box::new(AndExp::And(compexp, andexp)), tokens)),
-                _ => bad_token(op_tok),
+            token_lit(tokens, Token::And).and_then(|(_, tokens)| {
+                parse_andexp(tokens)
+                    .map(|(andexp, tokens)| (Box::new(AndExp::And(compexp, andexp)), tokens))
             })
         })
         .or_else(|_| {
@@ -282,7 +340,6 @@ fn parse_primary(tokens: &[PosnToken]) -> ParserResult<Box<Primary<Parsed, Strin
             };
         }
 
-        let posn = tok.file_posn;
         match &tok.token {
             //Token::IntLit(n) => Some((Box<Primary::IntLit(*n)>, tokens)),
             Token::IntLit(n) => mk!(Primary::IntLit(*n)),
@@ -290,19 +347,11 @@ fn parse_primary(tokens: &[PosnToken]) -> ParserResult<Box<Primary<Parsed, Strin
             Token::False => mk!(Primary::BoolLit(false)),
             Token::StringLit(s) => mk!(Primary::StringLit(s.to_string())),
             Token::Variable(v) => mk!(Primary::Variable((), v.to_string())),
-            Token::LParen => parse_expression(tokens)
-                .and_then(|(expression, tokens)| {
-                    item(tokens).and_then(|(tok, tokens)| match tok.token {
-                        Token::RParen => Ok((Box::new(Primary::Paren(expression)), tokens)),
-                        _ => throw_error("unmatched left parenthesis".to_string(), posn),
-                    })
-                })
-                .or_else(|_| {
-                    item(tokens).and_then(|(tok, tokens)| match tok.token {
-                        Token::RParen => Ok((Box::new(Primary::Unit()), tokens)),
-                        _ => throw_error("unmatched left parenthesis".to_string(), posn),
-                    })
-                }),
+            Token::LParen => parse_expression(tokens).and_then(|(expression, tokens)| {
+                token_lit(tokens, Token::RParen)
+                    .map(|(_, tokens)| (Box::new(Primary::Paren(expression)), tokens))
+            }),
+            Token::Unit => mk!(Primary::Unit()),
             _ => bad_token(tok),
         }
     })

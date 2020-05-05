@@ -36,9 +36,9 @@ fn throw_error<A>(message: String, file_posn: FilePosition) -> TyperResult<A> {
 pub fn type_program(program: Program<Parsed, String>) -> TyperResult<Program<Typed, String>> {
     let mut types = HashMap::new();
     let mut statements = Vec::new();
-    for (file_posn, stmt) in program.statements {
-        match type_statement(file_posn, &mut types, *stmt) {
-            Ok((stmt, _)) => statements.push(((), stmt)),
+    for tagged_stmt in program.statements {
+        match type_statement(tagged_stmt.tag, &mut types, tagged_stmt.statement) {
+            Ok((stmt, _)) => statements.push(TaggedStatement::new((), stmt)),
             Err(e) => return Err(e),
         }
     }
@@ -50,7 +50,7 @@ fn type_statement(
     file_posn: FilePosition,
     types: &mut TypeMap,
     statement: Statement<Parsed, String>,
-) -> TyperResult<(Box<Statement<Typed, String>>, SwindleType)> {
+) -> TyperResult<(Statement<Typed, String>, SwindleType)> {
     match statement {
         Statement::Declare(typ, varname, expression) => {
             if types.contains_key(&varname) {
@@ -59,7 +59,7 @@ fn type_statement(
                 type_expression(file_posn, types, *expression).and_then(|(e, t)| {
                     if type_matches_swindle_type(typ, t) {
                         types.insert(varname.to_string(), t);
-                        Ok((Box::new(Statement::Declare(typ, varname, e)), t))
+                        Ok((Statement::Declare(typ, varname, e), t))
                     } else {
                         throw_error("bad types for declare".to_string(), file_posn)
                     }
@@ -67,11 +67,11 @@ fn type_statement(
             }
         }
         Statement::Write((), expression) => type_expression(file_posn, types, *expression)
-            .map(|(e, t)| (Box::new(Statement::Write(t, e)), t)),
+            .map(|(e, t)| (Statement::Write(t, e), SwindleType::Unit())),
         Statement::Writeln((), expression) => type_expression(file_posn, types, *expression)
-            .map(|(e, t)| (Box::new(Statement::Writeln(t, e)), t)),
+            .map(|(e, t)| (Statement::Writeln(t, e), SwindleType::Unit())),
         Statement::Expression(expression) => type_expression(file_posn, types, *expression)
-            .map(|(e, t)| (Box::new(Statement::Expression(e)), t)),
+            .map(|(e, t)| (Statement::Expression(e), t)),
     }
 }
 
@@ -101,10 +101,106 @@ fn type_expression(
             }),
             None => throw_error(format!("undeclared variable {}", varname), file_posn),
         },
+        Expression::IfExp(ifexp) => {
+            parse_ifexp(file_posn, types, *ifexp).map(|(i, t)| (Box::new(Expression::IfExp(i)), t))
+        }
         Expression::OrExp(orexp) => {
             type_orexp(file_posn, types, *orexp).map(|(o, t)| (Box::new(Expression::OrExp(o)), t))
         }
     }
+}
+
+fn parse_ifexp(
+    file_posn: FilePosition,
+    types: &TypeMap,
+    ifexp: IfExp<Parsed, String>,
+) -> TyperResult<(Box<IfExp<Typed, String>>, SwindleType)> {
+    let cond = match type_expression(file_posn, types, *ifexp.cond) {
+        Ok((cond, SwindleType::Bool())) => cond,
+        Err(e) => return Err(e),
+        _ => return throw_error("if condition must be bool".to_string(), file_posn),
+    };
+
+    let (body, iftype) = match type_body(file_posn, types, ifexp.body) {
+        Ok((body, iftype)) => (body, iftype),
+        Err(e) => return Err(e),
+    };
+
+    let mut elifs = Vec::new();
+    for elif in ifexp.elifs {
+        elifs.push(match type_elif(file_posn, types, elif) {
+            Ok((elif, t)) => {
+                if t == iftype {
+                    elif
+                } else {
+                    return throw_error("write this later".to_string(), file_posn);
+                }
+            }
+            Err(e) => return Err(e),
+        })
+    }
+
+    let els = match type_body(file_posn, types, ifexp.els) {
+        Ok((els, t)) => {
+            if t == iftype {
+                els
+            } else {
+                return throw_error("write this one too".to_string(), file_posn);
+            }
+        }
+        Err(e) => return Err(e),
+    };
+
+    Ok((
+        Box::new(IfExp {
+            cond,
+            body,
+            elifs,
+            els,
+        }),
+        iftype,
+    ))
+}
+
+fn type_elif(
+    file_posn: FilePosition,
+    types: &TypeMap,
+    elif: Elif<Parsed, String>,
+) -> TyperResult<(Elif<Typed, String>, SwindleType)> {
+    let cond = match type_expression(file_posn, types, *elif.cond) {
+        Ok((cond, SwindleType::Bool())) => cond,
+        Err(e) => return Err(e),
+        _ => return throw_error("if condition must be bool".to_string(), file_posn),
+    };
+
+    let (body, typ) = match type_body(file_posn, types, elif.body) {
+        Ok((body, if_type)) => (body, if_type),
+        Err(e) => return Err(e),
+    };
+
+    Ok((Elif { cond, body }, typ))
+}
+
+fn type_body(
+    file_posn: FilePosition,
+    types: &TypeMap,
+    body: Body<Parsed, String>,
+) -> TyperResult<(Body<Typed, String>, SwindleType)> {
+    let mut types = types.clone();
+    let mut body_type = SwindleType::Unit();
+    let mut statements = Vec::new();
+
+    for stmt in body.statements {
+        match type_statement(file_posn, &mut types, stmt) {
+            Ok((stmt, t)) => {
+                body_type = t;
+                statements.push(stmt);
+            }
+            Err(e) => return Err(e),
+        }
+    }
+
+    Ok((Body { statements }, body_type))
 }
 
 fn type_orexp(

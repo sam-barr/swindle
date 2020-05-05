@@ -7,19 +7,8 @@ use swindle::tokenizer::*;
 use swindle::typechecker::*;
 
 fn main() {
-    let code = "writeln \"Hello, World!\";
-    int x = 1;
-    int y = 10;
-    writeln x;
-    writeln y;
-    y = x + y;
-    writeln (2 * x) + y * y;
-    string a = \"Hi\";
-    string b = \"Hi\";
-    string c = \"Bye\";
-    writeln a == b;
-    writeln b == c;
-    writeln not true;";
+    //let code = "bool hahaha = true; string x = if hahaha { \"Hello, World!\"; } else { \"Goodbye, World\"; }; writeln x;";
+    let code = "int y = 7; unit hi = if true {int x = 0; writeln x;} else { writeln y; };";
 
     let result = tokenize(code)
         .and_then(|tokens| parse_program(&tokens))

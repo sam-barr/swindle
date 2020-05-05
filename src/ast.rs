@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 use std::boxed::Box;
+use std::default::Default;
 
 pub trait Tag {
     type VariableTag: core::fmt::Debug;
@@ -12,7 +13,26 @@ pub struct Program<T, ID>
 where
     T: Tag,
 {
-    pub statements: Vec<(T::StatementTag, Box<Statement<T, ID>>)>,
+    //pub statements: Vec<(T::StatementTag, Box<Statement<T, ID>>)>,
+    pub statements: Vec<TaggedStatement<T, ID>>,
+}
+
+#[derive(Debug)]
+pub struct TaggedStatement<T, ID>
+where
+    T: Tag,
+{
+    pub tag: T::StatementTag,
+    pub statement: Statement<T, ID>,
+}
+
+impl<T, ID> TaggedStatement<T, ID>
+where
+    T: Tag,
+{
+    pub fn new(tag: T::StatementTag, statement: Statement<T, ID>) -> Self {
+        TaggedStatement { tag, statement }
+    }
 }
 
 #[derive(Debug)]
@@ -34,14 +54,55 @@ pub enum Type {
     Unit(),
 }
 
+// make this a tagged statement?
+#[derive(Debug)]
+pub struct Body<T, ID>
+where
+    T: Tag,
+{
+    pub statements: Vec<Statement<T, ID>>,
+}
+
+impl<T, ID> Default for Body<T, ID>
+where
+    T: Tag,
+{
+    fn default() -> Self {
+        Body {
+            statements: Vec::new(),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum Expression<T, ID>
 where
     T: Tag,
 {
     Assign(ID, Box<Expression<T, ID>>), // TODO: eventually have a LValue enum
+    IfExp(Box<IfExp<T, ID>>),
     OrExp(Box<OrExp<T, ID>>),
     // TODO: Control Structures (yes they are expressions)
+}
+
+#[derive(Debug)]
+pub struct IfExp<T, ID>
+where
+    T: Tag,
+{
+    pub cond: Box<Expression<T, ID>>,
+    pub body: Body<T, ID>,
+    pub elifs: Vec<Elif<T, ID>>,
+    pub els: Body<T, ID>, // if its empty there's no else
+}
+
+#[derive(Debug)]
+pub struct Elif<T, ID>
+where
+    T: Tag,
+{
+    pub cond: Box<Expression<T, ID>>,
+    pub body: Body<T, ID>,
 }
 
 #[derive(Debug)]

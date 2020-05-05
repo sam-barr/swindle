@@ -10,6 +10,8 @@ pub enum Token {
     Variable(String),
     LParen,
     RParen,
+    LBrace,
+    RBrace,
 
     // operands
     Quotient,
@@ -29,7 +31,7 @@ pub enum Token {
     IntType,
     StringType,
     BoolType,
-    UnitType,
+    Unit,
     True,
     False,
     Write,
@@ -37,6 +39,9 @@ pub enum Token {
     And,
     Or,
     Not,
+    If,
+    Elif,
+    Else,
 }
 
 #[derive(Debug, Clone)]
@@ -141,7 +146,7 @@ pub fn tokenize(source: &str) -> Result<Vec<PosnToken>, SwindleError> {
         try_lex!("int", IntType);
         try_lex!("string", StringType);
         try_lex!("bool", BoolType);
-        try_lex!("unit", UnitType);
+        try_lex!("unit", Unit);
         try_lex!("true", True);
         try_lex!("false", False);
         try_lex!("writeln", Writeln);
@@ -153,6 +158,9 @@ pub fn tokenize(source: &str) -> Result<Vec<PosnToken>, SwindleError> {
         try_lex!("!=", Neq);
         try_lex!(">=", Geq);
         try_lex!("<=", Leq);
+        try_lex!("if", If);
+        try_lex!("elif", Elif);
+        try_lex!("else", Else);
 
         let posn = chars.file_posn;
         let c = match chars.next() {
@@ -180,6 +188,10 @@ pub fn tokenize(source: &str) -> Result<Vec<PosnToken>, SwindleError> {
             tokens.push(PosnToken::new(Token::LParen, posn));
         } else if c == ')' {
             tokens.push(PosnToken::new(Token::RParen, posn));
+        } else if c == '{' {
+            tokens.push(PosnToken::new(Token::LBrace, posn));
+        } else if c == '}' {
+            tokens.push(PosnToken::new(Token::RBrace, posn));
         } else if let Some(mut num) = c.to_digit(10) {
             while let Some(digit) = chars.next() {
                 if let Some(digit) = digit.to_digit(10) {
