@@ -7,8 +7,18 @@ use swindle::tokenizer::*;
 use swindle::typechecker::*;
 
 fn main() {
-    //let code = "bool hahaha = true; string x = if hahaha { \"Hello, World!\"; } else { \"Goodbye, World\"; }; writeln x;";
-    let code = "int y = 7; unit hi = if true {int x = 0; writeln x;} else { writeln y; };";
+    //let code = "bool hahaha = false; string x = if hahaha { \"Hello, World!\"; } else { \"Goodbye, World\"; }; writeln x;";
+    //let code = "int y = 7; unit hi = if true {int x = 0; writeln x;} else { writeln y; };";
+    let code = "int x = 3;
+    unit hi = if x == 0 {
+        writeln \"zero\";
+    } elif x == 1 {
+        writeln \"one\";
+    } elif x == 2 {
+        writeln \"two\";
+    } else {
+        writeln \"hello\";
+    };";
 
     let result = tokenize(code)
         .and_then(|tokens| parse_program(&tokens))
@@ -18,6 +28,7 @@ fn main() {
         Ok(program) => {
             let (program, _num_variables) = rename_program(program);
             let (bytecode, strings) = byte_program(program);
+            println!("{:?}", bytecode);
             run(&bytecode, strings);
         }
         Err(e) => println!("{}", e),
@@ -90,6 +101,15 @@ impl<'a> SwindleValue<'a> {
 }
 
 fn run(bytecode: &[ByteCodeOp], strings: HashMap<UID, String>) {
+    let labels = {
+        let mut labels = HashMap::new();
+        for (idx, op) in bytecode.iter().enumerate() {
+            if let ByteCodeOp::Label(uid) = op {
+                labels.insert(uid, idx);
+            }
+        }
+        labels
+    };
     let mut variables = HashMap::<UID, SwindleValue>::new();
     let mut stack = Vec::new();
     let mut idx = 0;
@@ -111,6 +131,9 @@ fn run(bytecode: &[ByteCodeOp], strings: HashMap<UID, String>) {
                 }
             }
             ByteCodeOp::Unit => stack.push(SwindleValue::Unit),
+            ByteCodeOp::Pop => {
+                stack.pop().unwrap();
+            }
 
             ByteCodeOp::Negate => {
                 let b = stack.pop().unwrap();
@@ -194,6 +217,22 @@ fn run(bytecode: &[ByteCodeOp], strings: HashMap<UID, String>) {
             }
             ByteCodeOp::Write => print!("{}", stack.pop().unwrap()),
             ByteCodeOp::Writeln => println!("{}", stack.pop().unwrap()),
+
+            ByteCodeOp::Label(_) => {}
+            ByteCodeOp::JumpIfFalse => {
+                idx += 1;
+                if let ByteCodeOp::UID(uid) = bytecode[idx] {
+                    if let SwindleValue::Bool(false) = stack.pop().unwrap() {
+                        idx = *labels.get(&uid).unwrap();
+                    }
+                }
+            }
+            ByteCodeOp::Jump => {
+                idx += 1;
+                if let ByteCodeOp::UID(uid) = bytecode[idx] {
+                    idx = *labels.get(&uid).unwrap();
+                }
+            }
             _ => panic!("wut"),
         }
 

@@ -3,12 +3,37 @@ use crate::ast::*;
 use crate::typechecker::Typed;
 use std::boxed::Box;
 use std::collections::HashMap;
+use std::default::Default;
 
 // TODO: this could be a lot smarter
 
-type NameTable = HashMap<String, UID>;
+#[derive(Clone)]
+struct NameTable {
+    next_id: UID,
+    table: HashMap<String, UID>,
+}
 
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+impl NameTable {
+    fn new() -> Self {
+        NameTable {
+            next_id: Default::default(),
+            table: HashMap::new(),
+        }
+    }
+
+    fn insert(&mut self, name: String) -> UID {
+        self.table.insert(name, self.next_id);
+        let id = self.next_id;
+        self.next_id.inc();
+        id
+    }
+
+    fn get(&self, name: &String) -> UID {
+        *self.table.get(name).unwrap()
+    }
+}
+
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Ord, PartialOrd)]
 pub struct UID(u32);
 
 impl UID {
@@ -21,32 +46,34 @@ impl UID {
     }
 }
 
+impl Default for UID {
+    fn default() -> Self {
+        UID::new()
+    }
+}
+
 pub fn rename_program(program: Program<Typed, String>) -> (Program<Typed, UID>, u32) {
-    let mut next_id = UID::new();
-    let mut name_table = HashMap::new();
+    let mut name_table = NameTable::new();
     let mut statements = Vec::new();
 
     for tagged_stmt in program.statements {
         statements.push(TaggedStatement::new(
             (),
-            rename_statement(&mut next_id, &mut name_table, tagged_stmt.statement),
+            rename_statement(&mut name_table, tagged_stmt.statement),
         ));
     }
 
-    (Program { statements }, next_id.0)
+    (Program { statements }, name_table.next_id.0)
 }
 
 fn rename_statement(
-    next_id: &mut UID,
     name_table: &mut NameTable,
     statement: Statement<Typed, String>,
 ) -> Statement<Typed, UID> {
     match statement {
         Statement::Declare(typ, varname, expression) => {
             let expression = rename_expression(name_table, *expression);
-            name_table.insert(varname, *next_id);
-            let new_name = *next_id;
-            next_id.inc();
+            let new_name = name_table.insert(varname);
             Statement::Declare(typ, new_name, expression)
         }
         Statement::Write(tag, expression) => {
@@ -67,12 +94,44 @@ fn rename_expression(
 ) -> Box<Expression<Typed, UID>> {
     Box::new(match expression {
         Expression::Assign(varname, expression) => Expression::Assign(
-            *name_table.get(&varname).unwrap(),
+            name_table.get(&varname),
             rename_expression(name_table, *expression),
         ),
-        Expression::IfExp(_) => unimplemented!(),
+        Expression::IfExp(ifexp) => Expression::IfExp(rename_ifexp(name_table, *ifexp)),
         Expression::OrExp(orexp) => Expression::OrExp(rename_orexp(name_table, *orexp)),
     })
+}
+
+fn rename_ifexp(name_table: &NameTable, ifexp: IfExp<Typed, String>) -> Box<IfExp<Typed, UID>> {
+    Box::new(IfExp {
+        cond: rename_expression(name_table, *ifexp.cond),
+        body: rename_body(name_table, ifexp.body),
+        elifs: {
+            let mut elifs = Vec::new();
+            for elif in ifexp.elifs {
+                elifs.push(rename_elif(name_table, elif));
+            }
+            elifs
+        },
+        els: rename_body(name_table, ifexp.els),
+    })
+}
+
+fn rename_elif(name_table: &NameTable, elif: Elif<Typed, String>) -> Elif<Typed, UID> {
+    Elif {
+        cond: rename_expression(name_table, *elif.cond),
+        body: rename_body(name_table, elif.body),
+    }
+}
+
+fn rename_body(name_table: &NameTable, body: Body<Typed, String>) -> Body<Typed, UID> {
+    let mut name_table = name_table.clone();
+    let mut statements = Vec::new();
+    for stmt in body.statements {
+        statements.push(rename_statement(&mut name_table, stmt));
+    }
+
+    Body { statements }
 }
 
 fn rename_orexp(name_table: &NameTable, orexp: OrExp<Typed, String>) -> Box<OrExp<Typed, UID>> {
@@ -148,7 +207,7 @@ fn rename_primary(
         Primary::IntLit(n) => Primary::IntLit(n),
         Primary::StringLit(s) => Primary::StringLit(s),
         Primary::BoolLit(b) => Primary::BoolLit(b),
-        Primary::Variable(t, varname) => Primary::Variable(t, *name_table.get(&varname).unwrap()),
+        Primary::Variable(t, varname) => Primary::Variable(t, name_table.get(&varname)),
         Primary::Unit() => Primary::Unit(),
     })
 }

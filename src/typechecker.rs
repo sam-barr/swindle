@@ -59,7 +59,7 @@ fn type_statement(
                 type_expression(file_posn, types, *expression).and_then(|(e, t)| {
                     if type_matches_swindle_type(typ, t) {
                         types.insert(varname.to_string(), t);
-                        Ok((Statement::Declare(typ, varname, e), t))
+                        Ok((Statement::Declare(typ, varname, e), SwindleType::Unit()))
                     } else {
                         throw_error("bad types for declare".to_string(), file_posn)
                     }
