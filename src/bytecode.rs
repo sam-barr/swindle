@@ -147,9 +147,35 @@ fn byte_expression(
             bc.push(ByteCodeOp::UID(uid));
             bc
         }
+        Expression::WhileExp(whileexp) => byte_whileexp(label, strings, *whileexp),
         Expression::IfExp(ifexp) => byte_ifexp(label, strings, *ifexp),
         Expression::OrExp(orexp) => byte_orexp(label, strings, *orexp),
     }
+}
+
+fn byte_whileexp(
+    label: &mut UID,
+    strings: &mut StringTable,
+    whileexp: WhileExp<Typed, UID>,
+) -> Vec<ByteCodeOp> {
+    let start_label = *label;
+    label.inc();
+    let end_label = *label;
+    label.inc();
+
+    let mut bc = Vec::new();
+    bc.push(ByteCodeOp::Label(start_label));
+    bc.append(&mut byte_expression(label, strings, *whileexp.cond));
+    bc.push(ByteCodeOp::JumpIfFalse);
+    bc.push(ByteCodeOp::UID(end_label));
+    bc.append(&mut byte_body(label, strings, whileexp.body));
+    bc.push(ByteCodeOp::Pop);
+    bc.push(ByteCodeOp::Jump);
+    bc.push(ByteCodeOp::UID(start_label));
+    bc.push(ByteCodeOp::Label(end_label));
+    bc.push(ByteCodeOp::Unit);
+
+    bc
 }
 
 fn byte_ifexp(
@@ -208,7 +234,10 @@ fn byte_body(
     if !body.statements.is_empty() {
         for stmt in body.statements {
             bc.append(&mut byte_statement(label, strings, stmt));
+            bc.push(ByteCodeOp::Pop);
         }
+        // remove the last pop, becaue the last statement is the value we return
+        bc.pop().unwrap();
     } else {
         bc.push(ByteCodeOp::Unit);
     }

@@ -101,6 +101,8 @@ fn type_expression(
             }),
             None => throw_error(format!("undeclared variable {}", varname), file_posn),
         },
+        Expression::WhileExp(whileexp) => parse_whileexp(file_posn, types, *whileexp)
+            .map(|(i, t)| (Box::new(Expression::WhileExp(i)), t)),
         Expression::IfExp(ifexp) => {
             parse_ifexp(file_posn, types, *ifexp).map(|(i, t)| (Box::new(Expression::IfExp(i)), t))
         }
@@ -108,6 +110,25 @@ fn type_expression(
             type_orexp(file_posn, types, *orexp).map(|(o, t)| (Box::new(Expression::OrExp(o)), t))
         }
     }
+}
+
+fn parse_whileexp(
+    file_posn: FilePosition,
+    types: &TypeMap,
+    whileexp: WhileExp<Parsed, String>,
+) -> TyperResult<(Box<WhileExp<Typed, String>>, SwindleType)> {
+    let cond = match type_expression(file_posn, types, *whileexp.cond) {
+        Ok((cond, SwindleType::Bool())) => cond,
+        Err(e) => return Err(e),
+        _ => return throw_error("while condition must be a bool".to_string(), file_posn),
+    };
+
+    let body = match type_body(file_posn, types, whileexp.body) {
+        Ok((body, _)) => body,
+        Err(e) => return Err(e),
+    };
+
+    Ok((Box::new(WhileExp { cond, body }), SwindleType::Unit()))
 }
 
 fn parse_ifexp(

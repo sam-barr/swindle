@@ -1,5 +1,8 @@
 use std::collections::HashMap;
+use std::env;
 use std::fmt;
+use std::fs::File;
+use std::io::Read;
 use swindle::bytecode::*;
 use swindle::parser::parse_program;
 use swindle::renamer::*;
@@ -7,20 +10,15 @@ use swindle::tokenizer::*;
 use swindle::typechecker::*;
 
 fn main() {
-    let code = "int x = 3;
-    unit hi = if x == 0 {
-        writeln \"zero\";
-    } elif x == 1 {
-        writeln \"one\";
-    } elif x == 2 {
-        writeln \"two\";
-    } else {
-        writeln \"hello\";
+    let code = {
+        let file_name = env::args().collect::<Vec<_>>().pop().unwrap();
+        let mut file = File::open(&file_name).unwrap();
+        let mut code = String::new();
+        file.read_to_string(&mut code).unwrap();
+        code
     };
-    writeln 4 - 2;
-    writeln hi;";
 
-    let result = tokenize(code)
+    let result = tokenize(&code)
         .and_then(|tokens| parse_program(&tokens))
         .and_then(type_program);
 
@@ -114,6 +112,8 @@ fn run(bytecode: &[ByteCodeOp], strings: HashMap<UID, String>) {
     let mut idx = 0;
 
     while idx < bytecode.len() {
+        //println!("{:?}: {:?}", bytecode[idx], stack);
+
         match bytecode[idx] {
             ByteCodeOp::IntConst(n) => stack.push(SwindleValue::Int(n)),
             ByteCodeOp::StringConst => {
@@ -173,7 +173,7 @@ fn run(bytecode: &[ByteCodeOp], strings: HashMap<UID, String>) {
             ByteCodeOp::Leq => {
                 let n1 = stack.pop().unwrap();
                 let n2 = stack.pop().unwrap();
-                stack.push(n1.int_biop_bool(n2, |a, b| a < b));
+                stack.push(n1.int_biop_bool(n2, |a, b| a <= b));
             }
             ByteCodeOp::Lt => {
                 let n1 = stack.pop().unwrap();
@@ -193,12 +193,12 @@ fn run(bytecode: &[ByteCodeOp], strings: HashMap<UID, String>) {
             ByteCodeOp::Gt => {
                 let n1 = stack.pop().unwrap();
                 let n2 = stack.pop().unwrap();
-                stack.push(n1.int_biop_bool(n2, |a, b| a < b));
+                stack.push(n1.int_biop_bool(n2, |a, b| a > b));
             }
             ByteCodeOp::Geq => {
                 let n1 = stack.pop().unwrap();
                 let n2 = stack.pop().unwrap();
-                stack.push(n1.int_biop_bool(n2, |a, b| a < b));
+                stack.push(n1.int_biop_bool(n2, |a, b| a >= b));
             }
 
             ByteCodeOp::And => {
@@ -212,11 +212,19 @@ fn run(bytecode: &[ByteCodeOp], strings: HashMap<UID, String>) {
                 stack.push(b1.bool_biop_bool(b2, |a, b| a || b));
             }
 
-            ByteCodeOp::Assign | ByteCodeOp::Declare => {
+            ByteCodeOp::Declare => {
                 idx += 1;
                 if let ByteCodeOp::UID(uid) = bytecode[idx] {
                     let value = stack.pop().unwrap();
                     variables.insert(uid, value);
+                }
+            }
+            ByteCodeOp::Assign => {
+                idx += 1;
+                if let ByteCodeOp::UID(uid) = bytecode[idx] {
+                    let value = stack.pop().unwrap();
+                    variables.insert(uid, value);
+                    stack.push(value); // assignment returns the assigned value
                 }
             }
             ByteCodeOp::Write => print!("{}", stack.pop().unwrap()),

@@ -43,6 +43,7 @@ pub enum Token {
     If,
     Elif,
     Else,
+    While,
 }
 
 #[derive(Debug, Clone)]
@@ -162,6 +163,7 @@ pub fn tokenize(source: &str) -> Result<Vec<PosnToken>, SwindleError> {
         try_lex!("if", If);
         try_lex!("elif", Elif);
         try_lex!("else", Else);
+        try_lex!("while", While);
 
         let posn = chars.file_posn;
         let c = match chars.next() {

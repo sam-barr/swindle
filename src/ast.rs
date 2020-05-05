@@ -81,8 +81,17 @@ where
 {
     Assign(ID, Box<Expression<T, ID>>), // TODO: eventually have a LValue enum
     IfExp(Box<IfExp<T, ID>>),
+    WhileExp(Box<WhileExp<T, ID>>),
     OrExp(Box<OrExp<T, ID>>),
-    // TODO: Control Structures (yes they are expressions)
+}
+
+#[derive(Debug)]
+pub struct WhileExp<T, ID>
+where
+    T: Tag,
+{
+    pub cond: Box<Expression<T, ID>>,
+    pub body: Body<T, ID>,
 }
 
 #[derive(Debug)]

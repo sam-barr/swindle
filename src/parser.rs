@@ -167,11 +167,23 @@ fn parse_expression(tokens: &[PosnToken]) -> ParserResult<Box<Expression<Parsed,
             _ => bad_token(tok),
         })
         .or_else(|_| {
+            parse_whileexp(tokens)
+                .map(|(whileexp, tokens)| (Box::new(Expression::WhileExp(whileexp)), tokens))
+        })
+        .or_else(|_| {
             parse_ifexp(tokens).map(|(ifexp, tokens)| (Box::new(Expression::IfExp(ifexp)), tokens))
         })
         .or_else(|_| {
             parse_orexp(tokens).map(|(orexp, tokens)| (Box::new(Expression::OrExp(orexp)), tokens))
         })
+}
+
+fn parse_whileexp(tokens: &[PosnToken]) -> ParserResult<Box<WhileExp<Parsed, String>>> {
+    token_lit(tokens, Token::While).and_then(|(_, tokens)| {
+        parse_expression(tokens).and_then(|(cond, tokens)| {
+            parse_body(tokens).map(|(body, tokens)| (Box::new(WhileExp { cond, body }), tokens))
+        })
+    })
 }
 
 fn parse_ifexp(tokens: &[PosnToken]) -> ParserResult<Box<IfExp<Parsed, String>>> {

@@ -97,8 +97,21 @@ fn rename_expression(
             name_table.get(&varname),
             rename_expression(name_table, *expression),
         ),
+        Expression::WhileExp(whileexp) => {
+            Expression::WhileExp(rename_whileexp(name_table, *whileexp))
+        }
         Expression::IfExp(ifexp) => Expression::IfExp(rename_ifexp(name_table, *ifexp)),
         Expression::OrExp(orexp) => Expression::OrExp(rename_orexp(name_table, *orexp)),
+    })
+}
+
+fn rename_whileexp(
+    name_table: &NameTable,
+    whileexp: WhileExp<Typed, String>,
+) -> Box<WhileExp<Typed, UID>> {
+    Box::new(WhileExp {
+        cond: rename_expression(name_table, *whileexp.cond),
+        body: rename_body(name_table, whileexp.body),
     })
 }
 
