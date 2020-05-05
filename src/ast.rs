@@ -170,6 +170,7 @@ where
 pub enum MulOp {
     Product,
     Quotient,
+    Remainder,
 }
 
 #[derive(Debug)]

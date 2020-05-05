@@ -7,8 +7,6 @@ use swindle::tokenizer::*;
 use swindle::typechecker::*;
 
 fn main() {
-    //let code = "bool hahaha = false; string x = if hahaha { \"Hello, World!\"; } else { \"Goodbye, World\"; }; writeln x;";
-    //let code = "int y = 7; unit hi = if true {int x = 0; writeln x;} else { writeln y; };";
     let code = "int x = 3;
     unit hi = if x == 0 {
         writeln \"zero\";
@@ -18,7 +16,9 @@ fn main() {
         writeln \"two\";
     } else {
         writeln \"hello\";
-    };";
+    };
+    writeln 4 - 2;
+    writeln hi;";
 
     let result = tokenize(code)
         .and_then(|tokens| parse_program(&tokens))
@@ -28,7 +28,6 @@ fn main() {
         Ok(program) => {
             let (program, _num_variables) = rename_program(program);
             let (bytecode, strings) = byte_program(program);
-            println!("{:?}", bytecode);
             run(&bytecode, strings);
         }
         Err(e) => println!("{}", e),
@@ -153,6 +152,11 @@ fn run(bytecode: &[ByteCodeOp], strings: HashMap<UID, String>) {
                 let n1 = stack.pop().unwrap();
                 let n2 = stack.pop().unwrap();
                 stack.push(n1.int_biop_int(n2, |a, b| a / b));
+            }
+            ByteCodeOp::Remainder => {
+                let n1 = stack.pop().unwrap();
+                let n2 = stack.pop().unwrap();
+                stack.push(n1.int_biop_int(n2, |a, b| a % b));
             }
 
             ByteCodeOp::Sum => {

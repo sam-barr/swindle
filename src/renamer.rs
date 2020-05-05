@@ -28,7 +28,7 @@ impl NameTable {
         id
     }
 
-    fn get(&self, name: &String) -> UID {
+    fn get(&self, name: &str) -> UID {
         *self.table.get(name).unwrap()
     }
 }

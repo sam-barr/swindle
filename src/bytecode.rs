@@ -22,8 +22,9 @@ pub enum ByteCodeOp {
     Not,    // pop, push
 
     // Mul
-    Product,  // 2pop, push
-    Quotient, // 2pop, push
+    Product,   // 2pop, push
+    Quotient,  // 2pop, push
+    Remainder, // 2pop, push
 
     // Add
     Sum,        // 2pop, push
@@ -204,8 +205,12 @@ fn byte_body(
     body: Body<Typed, UID>,
 ) -> Vec<ByteCodeOp> {
     let mut bc = Vec::new();
-    for stmt in body.statements {
-        bc.append(&mut byte_statement(label, strings, stmt));
+    if !body.statements.is_empty() {
+        for stmt in body.statements {
+            bc.append(&mut byte_statement(label, strings, stmt));
+        }
+    } else {
+        bc.push(ByteCodeOp::Unit);
     }
     bc
 }
@@ -218,8 +223,8 @@ fn byte_orexp(
     match orexp {
         OrExp::Or(andexp, orexp) => {
             let mut bc = Vec::new();
-            bc.append(&mut byte_andexp(label, strings, *andexp));
             bc.append(&mut byte_orexp(label, strings, *orexp));
+            bc.append(&mut byte_andexp(label, strings, *andexp));
             bc.push(ByteCodeOp::Or);
             bc
         }
@@ -235,8 +240,8 @@ fn byte_andexp(
     match andexp {
         AndExp::And(compexp, andexp) => {
             let mut bc = Vec::new();
-            bc.append(&mut byte_compexp(label, strings, *compexp));
             bc.append(&mut byte_andexp(label, strings, *andexp));
+            bc.append(&mut byte_compexp(label, strings, *compexp));
             bc.push(ByteCodeOp::And);
             bc
         }
@@ -252,8 +257,8 @@ fn byte_compexp(
     match compexp {
         CompExp::Comp(compop, addexp1, addexp2) => {
             let mut bc = Vec::new();
-            bc.append(&mut byte_addexp(label, strings, *addexp1));
             bc.append(&mut byte_addexp(label, strings, *addexp2));
+            bc.append(&mut byte_addexp(label, strings, *addexp1));
             bc.push(match compop {
                 CompOp::Leq => ByteCodeOp::Leq,
                 CompOp::Lt => ByteCodeOp::Lt,
@@ -276,8 +281,8 @@ fn byte_addexp(
     match addexp {
         AddExp::Add(addop, mulexp, addexp) => {
             let mut bc = Vec::new();
-            bc.append(&mut byte_mulexp(label, strings, *mulexp));
             bc.append(&mut byte_addexp(label, strings, *addexp));
+            bc.append(&mut byte_mulexp(label, strings, *mulexp));
             bc.push(match addop {
                 AddOp::Sum => ByteCodeOp::Sum,
                 AddOp::Difference => ByteCodeOp::Difference,
@@ -296,11 +301,12 @@ fn byte_mulexp(
     match mulexp {
         MulExp::Mul(mulop, unary, mulexp) => {
             let mut bc = Vec::new();
-            bc.append(&mut byte_unary(label, strings, *unary));
             bc.append(&mut byte_mulexp(label, strings, *mulexp));
+            bc.append(&mut byte_unary(label, strings, *unary));
             bc.push(match mulop {
                 MulOp::Product => ByteCodeOp::Product,
                 MulOp::Quotient => ByteCodeOp::Quotient,
+                MulOp::Remainder => ByteCodeOp::Remainder,
             });
             bc
         }

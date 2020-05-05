@@ -309,6 +309,7 @@ fn parse_mulop(tokens: &[PosnToken]) -> ParserResult<MulOp> {
     item(tokens).and_then(|(tok, tokens)| match tok.token {
         Token::Product => Ok((MulOp::Product, tokens)),
         Token::Quotient => Ok((MulOp::Quotient, tokens)),
+        Token::Remainder => Ok((MulOp::Remainder, tokens)),
         _ => bad_token(tok),
     })
 }

@@ -16,6 +16,7 @@ pub enum Token {
     // operands
     Quotient,
     Product,
+    Remainder,
     Difference,
     Sum,
     Leq,
@@ -172,6 +173,8 @@ pub fn tokenize(source: &str) -> Result<Vec<PosnToken>, SwindleError> {
             tokens.push(PosnToken::new(Token::Quotient, posn));
         } else if c == '*' {
             tokens.push(PosnToken::new(Token::Product, posn));
+        } else if c == '%' {
+            tokens.push(PosnToken::new(Token::Remainder, posn));
         } else if c == '-' {
             tokens.push(PosnToken::new(Token::Difference, posn));
         } else if c == '+' {
