@@ -10,7 +10,7 @@ use std::collections::HashMap;
 pub enum ByteCodeOp {
     // Primary
     UID(UID),        // this is an argument to other operatios
-    IntConst(i32),   // push
+    IntConst(i64),   // push
     StringConst,     // args: UID
     BoolConst(bool), // push
     Variable,        // args: UID

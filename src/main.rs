@@ -35,7 +35,7 @@ fn main() {
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 enum SwindleValue {
-    Int(i32),
+    Int(i64),
     ConstString(UID),
     HeapString(usize),
     Bool(bool),
@@ -59,7 +59,7 @@ impl SwindleValue {
 
     fn int_biop_int<F>(self, other: Self, f: F) -> Self
     where
-        F: FnOnce(i32, i32) -> i32,
+        F: FnOnce(i64, i64) -> i64,
     {
         match (self, other) {
             (SwindleValue::Int(a), SwindleValue::Int(b)) => SwindleValue::Int(f(a, b)),
@@ -69,7 +69,7 @@ impl SwindleValue {
 
     fn int_biop_bool<F>(self, other: Self, f: F) -> Self
     where
-        F: FnOnce(i32, i32) -> bool,
+        F: FnOnce(i64, i64) -> bool,
     {
         match (self, other) {
             (SwindleValue::Int(a), SwindleValue::Int(b)) => SwindleValue::Bool(f(a, b)),

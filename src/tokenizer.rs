@@ -5,7 +5,7 @@ use std::str::Chars;
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Token {
     // literals
-    IntLit(i32),
+    IntLit(i64),
     StringLit(String),
     Variable(String),
     LParen,
@@ -206,7 +206,7 @@ pub fn tokenize(source: &str) -> Result<Vec<PosnToken>, SwindleError> {
                     break;
                 }
             }
-            match i32::try_from(num) {
+            match i64::try_from(num) {
                 Ok(num) => tokens.push(PosnToken::new(Token::IntLit(num), posn)),
                 Err(_) => {
                     return Err(SwindleError {
