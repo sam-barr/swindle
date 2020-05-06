@@ -33,8 +33,7 @@ pub enum ByteCodeOp {
     // Comp
     Leq, // 2pop, push
     Lt,  // 2pop, push
-    Eq,  // 2pop, push
-    Neq, // 2pop, push
+    Eq,  // 2pop, push (NOTE there is no Neq)
     Gt,  // 2pop, push
     Geq, // 2pop, push
 
@@ -291,14 +290,17 @@ fn byte_compexp(
             let mut bc = Vec::new();
             bc.append(&mut byte_addexp(label, strings, *addexp2));
             bc.append(&mut byte_addexp(label, strings, *addexp1));
-            bc.push(match compop {
-                CompOp::Leq => ByteCodeOp::Leq,
-                CompOp::Lt => ByteCodeOp::Lt,
-                CompOp::Eq => ByteCodeOp::Eq,
-                CompOp::Neq => ByteCodeOp::Neq,
-                CompOp::Gt => ByteCodeOp::Gt,
-                CompOp::Geq => ByteCodeOp::Geq,
-            });
+            match compop {
+                CompOp::Leq => bc.push(ByteCodeOp::Leq),
+                CompOp::Lt => bc.push(ByteCodeOp::Lt),
+                CompOp::Eq => bc.push(ByteCodeOp::Eq),
+                CompOp::Neq => {
+                    bc.push(ByteCodeOp::Eq);
+                    bc.push(ByteCodeOp::Not);
+                }
+                CompOp::Gt => bc.push(ByteCodeOp::Gt),
+                CompOp::Geq => bc.push(ByteCodeOp::Geq),
+            }
             bc
         }
         CompExp::AddExp(addexp) => byte_addexp(label, strings, *addexp),
