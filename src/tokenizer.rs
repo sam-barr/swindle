@@ -228,10 +228,12 @@ pub fn tokenize(source: &str) -> Result<Vec<PosnToken>, SwindleError> {
                     finished_string = true;
                     break;
                 } else if c == '\\' {
-                    string.push(c);
                     match chars.next() {
-                        Some(c) => string.push(c),
-                        None => break,
+                        Some('"') => string.push('\"'),
+                        Some('\\') => string.push('\\'),
+                        Some('t') => string.push('\t'),
+                        Some('n') => string.push('\n'),
+                        _ => break,
                     }
                 } else {
                     string.push(c);

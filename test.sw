@@ -1,7 +1,1 @@
-string a = "hi";
-string b = "h";
-string c = "i";
-
-writeln a == a;
-writeln a == "hi";
-writeln a == $ b c;
+int x = (if true { writeln "hi"; 1; } else { 2; }) + (if false { 1;} else { writeln "bye"; 2;});
