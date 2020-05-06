@@ -26,8 +26,12 @@ fn main() {
         Ok(program) => {
             let (program, _num_variables) = rename_program(program);
             let (bytecode, strings) = byte_program(program);
-            let vm = VM::new(bytecode, strings);
-            vm.run(false);
+            let mut vm = VM::new(bytecode, strings);
+            let debug = false;
+            vm.run(debug);
+            if debug {
+                vm.debug();
+            }
         }
         Err(e) => println!("{}", e),
     }
@@ -170,14 +174,16 @@ impl VM {
 
     fn debug(&self) {
         println!("~~~~~~~~VM~~~~~~~~");
-        print!("Current op: {:?}", self.bytecode[self.idx]);
-        match self.bytecode[self.idx] {
-            ByteCodeOp::StringConst
-            | ByteCodeOp::Variable
-            | ByteCodeOp::Assign
-            | ByteCodeOp::Declare
-            | ByteCodeOp::JumpIfFalse => println!("({:?})", self.bytecode[self.idx + 1]),
-            _ => println!(),
+        if self.idx < self.bytecode.len() {
+            print!("Current op: {:?}", self.bytecode[self.idx]);
+            match self.bytecode[self.idx] {
+                ByteCodeOp::StringConst
+                | ByteCodeOp::Variable
+                | ByteCodeOp::Assign
+                | ByteCodeOp::Declare
+                | ByteCodeOp::JumpIfFalse => println!("({:?})", self.bytecode[self.idx + 1]),
+                _ => println!(),
+            }
         }
         println!("Variables: {:?}", self.variables);
         println!("Stack: {:?}", self.stack);
@@ -215,7 +221,7 @@ impl VM {
         }
     }
 
-    fn run(mut self, debug: bool) {
+    fn run(&mut self, debug: bool) {
         while self.idx < self.bytecode.len() {
             if debug {
                 self.debug();
@@ -323,13 +329,48 @@ impl VM {
                     self.push(b1.bool_biop_bool(b2, |a, b| a || b));
                 }
 
+                ByteCodeOp::Stringify => {
+                    let value = self.pop();
+                    match value {
+                        SwindleValue::Int(n) => {
+                            let s = n.to_string();
+                            let uid = self.heap.alloc(s);
+                            self.push(SwindleValue::HeapString(uid));
+                        }
+                        SwindleValue::Bool(n) => {
+                            let s = n.to_string();
+                            let uid = self.heap.alloc(s);
+                            self.push(SwindleValue::HeapString(uid));
+                        }
+                        SwindleValue::Unit => {
+                            let s = "".to_string();
+                            let uid = self.heap.alloc(s);
+                            self.push(SwindleValue::HeapString(uid));
+                        }
+                        SwindleValue::ConstString(_) | SwindleValue::HeapString(_) => {
+                            // just putt the value back on the stack, already a string
+                            self.push(value)
+                        }
+                    }
+                }
                 ByteCodeOp::Append => {
-                    let s1 = self.pop();
-                    let s2 = self.pop();
-                    let s = format!("{}{}", self.display(s1), self.display(s2));
-                    self.drop(s1);
-                    self.drop(s2);
-                    let uid = self.heap.alloc(s);
+                    let v1 = self.pop();
+                    let v2 = self.pop();
+                    let mut s1 = match v1 {
+                        SwindleValue::ConstString(uid) => self.strings.get(&uid).unwrap(),
+                        SwindleValue::HeapString(uid) => self.heap.get(uid),
+                        _ => panic!(),
+                    }
+                    .to_string();
+                    let s2 = match v2 {
+                        SwindleValue::ConstString(uid) => self.strings.get(&uid).unwrap(),
+                        SwindleValue::HeapString(uid) => self.heap.get(uid),
+                        _ => panic!(),
+                    };
+                    s1.push_str(s2);
+                    self.drop(v1);
+                    self.drop(v2);
+                    let uid = self.heap.alloc(s1);
                     self.push(SwindleValue::HeapString(uid));
                 }
 

@@ -6,8 +6,8 @@ while x <= 100 {
 
     string fizz = if three { "fizz"; } else { ""; };
     string buzz = if five  { "buzz"; } else { ""; };
-    string n = if three or five { ""; } else { "" x; };
-    writeln "" fizz buzz n;
+    string n = if three or five { ""; } else { $ x; };
+    writeln $ fizz buzz n;
 
     x = x + 1;
 };

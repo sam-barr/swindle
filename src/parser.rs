@@ -71,6 +71,18 @@ where
     }
 }
 
+fn many1<'a, A, P>(tokens: &'a [PosnToken], parser: P) -> ParserResult<Vec<A>>
+where
+    P: Fn(&'a [PosnToken]) -> ParserResult<'a, A>,
+{
+    parser(tokens).and_then(|(a, tokens)| {
+        let mut vec = vec![a];
+        let (mut rest, tokens) = many0(tokens, parser);
+        vec.append(&mut rest);
+        Ok((vec, tokens))
+    })
+}
+
 pub fn parse_program(tokens: &[PosnToken]) -> Result<Program<Parsed, String>, SwindleError> {
     let mut leftover_tokens = tokens;
     let mut statements = Vec::new();
@@ -335,25 +347,13 @@ fn parse_unary(tokens: &[PosnToken]) -> ParserResult<Box<Unary<Parsed, String>>>
             Token::Not => {
                 parse_unary(tokens).map(|(unary, tokens)| (Box::new(Unary::Not(unary)), tokens))
             }
+            Token::Stringify => many1(tokens, parse_primary)
+                .map(|(primaries, tokens)| (Box::new(Unary::Stringify(primaries)), tokens)),
             _ => throw_error("null".to_string(), tok.file_posn),
         })
         .or_else(|_| {
-            parse_primary(tokens).map(|(primary, tokens)| match primary {
-                Primary::StringLit(s) => {
-                    let (mut rest, tokens) = many0(tokens, parse_primary);
-                    if rest.is_empty() {
-                        (
-                            Box::new(Unary::Primary(Box::new(Primary::StringLit(s)))),
-                            tokens,
-                        )
-                    } else {
-                        let mut append = vec![Primary::StringLit(s)];
-                        append.append(&mut rest);
-                        (Box::new(Unary::Append(append)), tokens)
-                    }
-                }
-                _ => (Box::new(Unary::Primary(Box::new(primary))), tokens),
-            })
+            parse_primary(tokens)
+                .map(|(primary, tokens)| (Box::new(Unary::Primary(Box::new(primary))), tokens))
         })
 }
 

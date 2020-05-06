@@ -208,12 +208,12 @@ fn rename_unary(name_table: &NameTable, unary: Unary<Typed, String>) -> Box<Unar
         Unary::Negate(unary) => Unary::Negate(rename_unary(name_table, *unary)),
         Unary::Not(unary) => Unary::Not(rename_unary(name_table, *unary)),
         Unary::Primary(primary) => Unary::Primary(rename_primary(name_table, *primary)),
-        Unary::Append(append) => {
-            let mut typed_append = Vec::new();
-            for primary in append {
-                typed_append.push(*rename_primary(name_table, primary));
+        Unary::Stringify(primaries) => {
+            let mut typed_primaries = Vec::new();
+            for primary in primaries {
+                typed_primaries.push(*rename_primary(name_table, primary));
             }
-            Unary::Append(typed_append)
+            Unary::Stringify(typed_primaries)
         }
     })
 }

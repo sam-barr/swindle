@@ -27,6 +27,7 @@ pub enum Token {
     Geq,
     Assign,
     Semicolon,
+    Stringify,
 
     // Keywords
     IntType,
@@ -190,6 +191,8 @@ pub fn tokenize(source: &str) -> Result<Vec<PosnToken>, SwindleError> {
             tokens.push(PosnToken::new(Token::Assign, posn));
         } else if c == ';' {
             tokens.push(PosnToken::new(Token::Semicolon, posn));
+        } else if c == '$' {
+            tokens.push(PosnToken::new(Token::Stringify, posn));
         } else if c == '(' {
             tokens.push(PosnToken::new(Token::LParen, posn));
         } else if c == ')' {
