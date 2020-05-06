@@ -149,7 +149,8 @@ fn parse_statement(tokens: &[PosnToken]) -> ParserResult<Statement<Parsed, Strin
                 .map(|(expression, tokens)| (Statement::Expression(expression), tokens))
         })
         .and_then(|(stmt, tokens)| {
-            token_lit(tokens, Token::Semicolon).map(|(_, tokens)| (stmt, tokens))
+            many1(tokens, |t| token_lit(t, Token::Semicolon)).map(|(_, tokens)| (stmt, tokens))
+            //token_lit(tokens, Token::Semicolon).map(|(_, tokens)| (stmt, tokens))
         })
 }
 

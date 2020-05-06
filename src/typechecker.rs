@@ -29,7 +29,7 @@ fn throw_error<A>(message: String, file_posn: FilePosition) -> TyperResult<A> {
     Err(SwindleError {
         message,
         file_posn,
-        error_type: ErrorType::Parser,
+        error_type: ErrorType::Typechecker,
     })
 }
 
