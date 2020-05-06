@@ -88,6 +88,10 @@ impl SwindleValue {
     }
 }
 
+//struct Heap {
+//    heap: HashMap<UID, String>
+//}
+
 struct VM {
     bytecode: Vec<ByteCodeOp>,
     idx: usize,
@@ -118,6 +122,15 @@ impl VM {
         }
     }
 
+    fn debug(&self) {
+        println!("~~~~~~~~VM~~~~~~~~");
+        println!("Current op: {:?}", self.bytecode[self.idx]);
+        println!("Variables: {:?}", self.variables);
+        println!("Stack: {:?}", self.stack);
+        println!("Heap: {:?}", self.heap);
+        println!("~~~~~~~~~~~~~~~~~~");
+    }
+
     fn display(&self, value: SwindleValue) -> String {
         match value {
             SwindleValue::ConstString(uid) => self.strings.get(&uid).unwrap().to_string(),
@@ -139,7 +152,9 @@ impl VM {
     fn run(mut self, debug: bool) {
         while self.idx < self.bytecode.len() {
             if debug {
-                println!("{:?}: {:?}", self.bytecode[self.idx], self.stack);
+                self.debug();
+                let mut buffer = String::new();
+                std::io::stdin().read_line(&mut buffer).unwrap();
             }
 
             match self.bytecode[self.idx] {
