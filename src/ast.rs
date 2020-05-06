@@ -190,7 +190,8 @@ where
     Negate(Box<Unary<T, ID>>),
     Not(Box<Unary<T, ID>>),
     Primary(Box<Primary<T, ID>>),
-    //Append(Vec<Box<Primary<T, ID>>>),
+    Append(Vec<Primary<T, ID>>),
+    // length of vec will be 2, first element is a string constant
 }
 
 #[derive(Debug)]

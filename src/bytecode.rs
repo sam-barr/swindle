@@ -42,6 +42,8 @@ pub enum ByteCodeOp {
     And, // 2pop, push
     Or,  // 2pop, push
 
+    Append, // usize pop, push
+
     Assign,  // arg: UID, pop, push
     Declare, // arg: UID, pop, push
     Write,   // pop, push
@@ -362,6 +364,17 @@ fn byte_unary(
             bc
         }
         Unary::Primary(primary) => byte_primary(label, strings, *primary),
+        Unary::Append(mut append) => {
+            let num = append.len();
+            let mut bc = Vec::new();
+            while let Some(primary) = append.pop() {
+                bc.append(&mut byte_primary(label, strings, primary));
+            }
+            for _ in 0..(num - 1) {
+                bc.push(ByteCodeOp::Append);
+            }
+            bc
+        }
     }
 }
 

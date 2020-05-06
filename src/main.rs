@@ -1,6 +1,6 @@
+#![allow(dead_code)]
 use std::collections::HashMap;
 use std::env;
-use std::fmt;
 use std::fs::File;
 use std::io::Read;
 use swindle::bytecode::*;
@@ -26,32 +26,23 @@ fn main() {
         Ok(program) => {
             let (program, _num_variables) = rename_program(program);
             let (bytecode, strings) = byte_program(program);
-            run(&bytecode, strings);
+            let vm = VM::new(bytecode, strings);
+            vm.run(false);
         }
         Err(e) => println!("{}", e),
     }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-enum SwindleValue<'a> {
+enum SwindleValue {
     Int(i32),
-    String(&'a String),
+    ConstString(UID),
+    HeapString(usize),
     Bool(bool),
     Unit,
 }
 
-impl fmt::Display for SwindleValue<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            SwindleValue::Int(n) => write!(f, "{}", n),
-            SwindleValue::String(s) => write!(f, "{}", s),
-            SwindleValue::Bool(b) => write!(f, "{}", b),
-            SwindleValue::Unit => write!(f, "()"),
-        }
-    }
-}
-
-impl<'a> SwindleValue<'a> {
+impl SwindleValue {
     fn negate(self) -> Self {
         match self {
             SwindleValue::Int(n) => SwindleValue::Int(-n),
@@ -97,157 +88,210 @@ impl<'a> SwindleValue<'a> {
     }
 }
 
-fn run(bytecode: &[ByteCodeOp], strings: HashMap<UID, String>) {
-    let labels = {
+struct VM {
+    bytecode: Vec<ByteCodeOp>,
+    idx: usize,
+    strings: HashMap<UID, String>,
+    variables: HashMap<UID, SwindleValue>,
+    stack: Vec<SwindleValue>,
+    labels: HashMap<UID, usize>,
+    heap: Vec<String>,
+}
+
+impl VM {
+    fn new(bytecode: Vec<ByteCodeOp>, strings: HashMap<UID, String>) -> Self {
         let mut labels = HashMap::new();
         for (idx, op) in bytecode.iter().enumerate() {
             if let ByteCodeOp::Label(uid) = op {
-                labels.insert(uid, idx);
+                labels.insert(*uid, idx);
             }
         }
-        labels
-    };
-    let mut variables = HashMap::<UID, SwindleValue>::new();
-    let mut stack = Vec::new();
-    let mut idx = 0;
 
-    while idx < bytecode.len() {
-        //println!("{:?}: {:?}", bytecode[idx], stack);
+        VM {
+            bytecode,
+            idx: 0,
+            strings,
+            variables: HashMap::new(),
+            stack: Vec::new(),
+            labels,
+            heap: Vec::new(),
+        }
+    }
 
-        match bytecode[idx] {
-            ByteCodeOp::IntConst(n) => stack.push(SwindleValue::Int(n)),
-            ByteCodeOp::StringConst => {
-                idx += 1;
-                if let ByteCodeOp::UID(uid) = bytecode[idx] {
-                    stack.push(SwindleValue::String(strings.get(&uid).unwrap()));
-                }
-            }
-            ByteCodeOp::BoolConst(b) => stack.push(SwindleValue::Bool(b)),
-            ByteCodeOp::Variable => {
-                idx += 1;
-                if let ByteCodeOp::UID(uid) = bytecode[idx] {
-                    stack.push(*variables.get(&uid).unwrap());
-                }
-            }
-            ByteCodeOp::Unit => stack.push(SwindleValue::Unit),
-            ByteCodeOp::Pop => {
-                stack.pop().unwrap();
-            }
+    fn display(&self, value: SwindleValue) -> String {
+        match value {
+            SwindleValue::ConstString(uid) => self.strings.get(&uid).unwrap().to_string(),
+            SwindleValue::HeapString(idx) => self.heap[idx].to_string(),
+            SwindleValue::Unit => "()".to_string(),
+            SwindleValue::Int(n) => n.to_string(),
+            SwindleValue::Bool(b) => b.to_string(),
+        }
+    }
 
-            ByteCodeOp::Negate => {
-                let b = stack.pop().unwrap();
-                stack.push(b.not());
-            }
-            ByteCodeOp::Not => {
-                let b = stack.pop().unwrap();
-                stack.push(b.negate());
+    fn push(&mut self, value: SwindleValue) {
+        self.stack.push(value);
+    }
+
+    fn pop(&mut self) -> SwindleValue {
+        self.stack.pop().unwrap()
+    }
+
+    fn run(mut self, debug: bool) {
+        while self.idx < self.bytecode.len() {
+            if debug {
+                println!("{:?}: {:?}", self.bytecode[self.idx], self.stack);
             }
 
-            ByteCodeOp::Product => {
-                let n1 = stack.pop().unwrap();
-                let n2 = stack.pop().unwrap();
-                stack.push(n1.int_biop_int(n2, |a, b| a * b));
-            }
-            ByteCodeOp::Quotient => {
-                let n1 = stack.pop().unwrap();
-                let n2 = stack.pop().unwrap();
-                stack.push(n1.int_biop_int(n2, |a, b| a / b));
-            }
-            ByteCodeOp::Remainder => {
-                let n1 = stack.pop().unwrap();
-                let n2 = stack.pop().unwrap();
-                stack.push(n1.int_biop_int(n2, |a, b| a % b));
-            }
-
-            ByteCodeOp::Sum => {
-                let n1 = stack.pop().unwrap();
-                let n2 = stack.pop().unwrap();
-                stack.push(n1.int_biop_int(n2, |a, b| a + b));
-            }
-            ByteCodeOp::Difference => {
-                let n1 = stack.pop().unwrap();
-                let n2 = stack.pop().unwrap();
-                stack.push(n1.int_biop_int(n2, |a, b| a - b));
-            }
-
-            ByteCodeOp::Leq => {
-                let n1 = stack.pop().unwrap();
-                let n2 = stack.pop().unwrap();
-                stack.push(n1.int_biop_bool(n2, |a, b| a <= b));
-            }
-            ByteCodeOp::Lt => {
-                let n1 = stack.pop().unwrap();
-                let n2 = stack.pop().unwrap();
-                stack.push(n1.int_biop_bool(n2, |a, b| a < b));
-            }
-            ByteCodeOp::Eq => {
-                let a = stack.pop().unwrap();
-                let b = stack.pop().unwrap();
-                stack.push(SwindleValue::Bool(a == b));
-            }
-            ByteCodeOp::Neq => {
-                let a = stack.pop().unwrap();
-                let b = stack.pop().unwrap();
-                stack.push(SwindleValue::Bool(a != b));
-            }
-            ByteCodeOp::Gt => {
-                let n1 = stack.pop().unwrap();
-                let n2 = stack.pop().unwrap();
-                stack.push(n1.int_biop_bool(n2, |a, b| a > b));
-            }
-            ByteCodeOp::Geq => {
-                let n1 = stack.pop().unwrap();
-                let n2 = stack.pop().unwrap();
-                stack.push(n1.int_biop_bool(n2, |a, b| a >= b));
-            }
-
-            ByteCodeOp::And => {
-                let b1 = stack.pop().unwrap();
-                let b2 = stack.pop().unwrap();
-                stack.push(b1.bool_biop_bool(b2, |a, b| a && b));
-            }
-            ByteCodeOp::Or => {
-                let b1 = stack.pop().unwrap();
-                let b2 = stack.pop().unwrap();
-                stack.push(b1.bool_biop_bool(b2, |a, b| a || b));
-            }
-
-            ByteCodeOp::Declare => {
-                idx += 1;
-                if let ByteCodeOp::UID(uid) = bytecode[idx] {
-                    let value = stack.pop().unwrap();
-                    variables.insert(uid, value);
-                }
-            }
-            ByteCodeOp::Assign => {
-                idx += 1;
-                if let ByteCodeOp::UID(uid) = bytecode[idx] {
-                    let value = stack.pop().unwrap();
-                    variables.insert(uid, value);
-                    stack.push(value); // assignment returns the assigned value
-                }
-            }
-            ByteCodeOp::Write => print!("{}", stack.pop().unwrap()),
-            ByteCodeOp::Writeln => println!("{}", stack.pop().unwrap()),
-
-            ByteCodeOp::Label(_) => {}
-            ByteCodeOp::JumpIfFalse => {
-                idx += 1;
-                if let ByteCodeOp::UID(uid) = bytecode[idx] {
-                    if let SwindleValue::Bool(false) = stack.pop().unwrap() {
-                        idx = *labels.get(&uid).unwrap();
+            match self.bytecode[self.idx] {
+                ByteCodeOp::IntConst(n) => self.push(SwindleValue::Int(n)),
+                ByteCodeOp::StringConst => {
+                    self.idx += 1;
+                    if let ByteCodeOp::UID(uid) = self.bytecode[self.idx] {
+                        self.push(SwindleValue::ConstString(uid));
                     }
                 }
-            }
-            ByteCodeOp::Jump => {
-                idx += 1;
-                if let ByteCodeOp::UID(uid) = bytecode[idx] {
-                    idx = *labels.get(&uid).unwrap();
+                ByteCodeOp::BoolConst(b) => self.push(SwindleValue::Bool(b)),
+                ByteCodeOp::Variable => {
+                    self.idx += 1;
+                    if let ByteCodeOp::UID(uid) = self.bytecode[self.idx] {
+                        self.push(*self.variables.get(&uid).unwrap());
+                    }
                 }
-            }
-            _ => panic!("wut"),
-        }
+                ByteCodeOp::Unit => self.push(SwindleValue::Unit),
+                ByteCodeOp::Pop => {
+                    self.pop();
+                }
 
-        idx += 1;
+                ByteCodeOp::Negate => {
+                    let b = self.pop();
+                    self.push(b.not());
+                }
+                ByteCodeOp::Not => {
+                    let b = self.pop();
+                    self.push(b.negate());
+                }
+
+                ByteCodeOp::Product => {
+                    let n1 = self.pop();
+                    let n2 = self.pop();
+                    self.push(n1.int_biop_int(n2, |a, b| a * b));
+                }
+                ByteCodeOp::Quotient => {
+                    let n1 = self.pop();
+                    let n2 = self.pop();
+                    self.push(n1.int_biop_int(n2, |a, b| a / b));
+                }
+                ByteCodeOp::Remainder => {
+                    let n1 = self.pop();
+                    let n2 = self.pop();
+                    self.push(n1.int_biop_int(n2, |a, b| a % b));
+                }
+
+                ByteCodeOp::Sum => {
+                    let n1 = self.pop();
+                    let n2 = self.pop();
+                    self.push(n1.int_biop_int(n2, |a, b| a + b));
+                }
+                ByteCodeOp::Difference => {
+                    let n1 = self.pop();
+                    let n2 = self.pop();
+                    self.push(n1.int_biop_int(n2, |a, b| a - b));
+                }
+
+                ByteCodeOp::Leq => {
+                    let n1 = self.pop();
+                    let n2 = self.pop();
+                    self.push(n1.int_biop_bool(n2, |a, b| a <= b));
+                }
+                ByteCodeOp::Lt => {
+                    let n1 = self.pop();
+                    let n2 = self.pop();
+                    self.push(n1.int_biop_bool(n2, |a, b| a < b));
+                }
+                ByteCodeOp::Eq => {
+                    let a = self.pop();
+                    let b = self.pop();
+                    self.push(SwindleValue::Bool(a == b));
+                }
+                ByteCodeOp::Neq => {
+                    let a = self.pop();
+                    let b = self.pop();
+                    self.push(SwindleValue::Bool(a != b));
+                }
+                ByteCodeOp::Gt => {
+                    let n1 = self.pop();
+                    let n2 = self.pop();
+                    self.push(n1.int_biop_bool(n2, |a, b| a > b));
+                }
+                ByteCodeOp::Geq => {
+                    let n1 = self.pop();
+                    let n2 = self.pop();
+                    self.push(n1.int_biop_bool(n2, |a, b| a >= b));
+                }
+
+                ByteCodeOp::And => {
+                    let b1 = self.pop();
+                    let b2 = self.pop();
+                    self.push(b1.bool_biop_bool(b2, |a, b| a && b));
+                }
+                ByteCodeOp::Or => {
+                    let b1 = self.pop();
+                    let b2 = self.pop();
+                    self.push(b1.bool_biop_bool(b2, |a, b| a || b));
+                }
+
+                ByteCodeOp::Append => {
+                    let s1 = self.pop();
+                    let s2 = self.pop();
+                    let i = self.heap.len();
+                    let s = format!("{}{}", self.display(s1), self.display(s2));
+                    self.heap.push(s);
+                    self.push(SwindleValue::HeapString(i));
+                }
+
+                ByteCodeOp::Declare => {
+                    self.idx += 1;
+                    if let ByteCodeOp::UID(uid) = self.bytecode[self.idx] {
+                        let value = self.pop();
+                        self.variables.insert(uid, value);
+                    }
+                }
+                ByteCodeOp::Assign => {
+                    self.idx += 1;
+                    if let ByteCodeOp::UID(uid) = self.bytecode[self.idx] {
+                        let value = self.pop();
+                        self.variables.insert(uid, value);
+                        self.push(value); // assignment returns the assigned value
+                    }
+                }
+                ByteCodeOp::Write => {
+                    let v = self.pop();
+                    print!("{}", self.display(v));
+                }
+                ByteCodeOp::Writeln => {
+                    let v = self.pop();
+                    println!("{}", self.display(v));
+                }
+
+                ByteCodeOp::Label(_) => {}
+                ByteCodeOp::JumpIfFalse => {
+                    self.idx += 1;
+                    if let ByteCodeOp::UID(uid) = self.bytecode[self.idx] {
+                        if let SwindleValue::Bool(false) = self.pop() {
+                            self.idx = *self.labels.get(&uid).unwrap();
+                        }
+                    }
+                }
+                ByteCodeOp::Jump => {
+                    self.idx += 1;
+                    if let ByteCodeOp::UID(uid) = self.bytecode[self.idx] {
+                        self.idx = *self.labels.get(&uid).unwrap();
+                    }
+                }
+                _ => panic!("wut"),
+            }
+
+            self.idx += 1;
+        }
     }
 }

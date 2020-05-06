@@ -52,7 +52,8 @@ fn token_lit<'a>(tokens: &'a [PosnToken], expected: Token) -> ParserResult<'a, &
     }
 }
 
-fn many0<'a, A, P>(tokens: &'a [PosnToken], parser: P) -> ParserResult<'a, Vec<A>>
+fn many0<'a, A, P>(tokens: &'a [PosnToken], parser: P) -> (Vec<A>, &'a [PosnToken])
+//ParserResult<'a, Vec<A>>
 where
     P: Fn(&'a [PosnToken]) -> ParserResult<'a, A>,
 {
@@ -65,7 +66,7 @@ where
                 tokens = toks;
                 collected.push(a);
             }
-            Err(_) => return Ok((collected, tokens)),
+            Err(_) => return (collected, tokens),
         }
     }
 }
@@ -189,8 +190,8 @@ fn parse_whileexp(tokens: &[PosnToken]) -> ParserResult<Box<WhileExp<Parsed, Str
 fn parse_ifexp(tokens: &[PosnToken]) -> ParserResult<Box<IfExp<Parsed, String>>> {
     token_lit(tokens, Token::If).and_then(|(_, tokens)| {
         parse_expression(tokens).and_then(|(cond, tokens)| {
-            parse_body(tokens).and_then(|(body, tokens)| {
-                many0(tokens, parse_elif).and_then(|(elifs, tokens)| {
+            parse_body(tokens).and_then(|(body, tokens)| match many0(tokens, parse_elif) {
+                (elifs, tokens) => {
                     let (els, tokens) = token_lit(tokens, Token::Else)
                         .and_then(|(_, tokens)| parse_body(tokens))
                         .unwrap_or_else(|_| (Default::default(), tokens));
@@ -203,17 +204,17 @@ fn parse_ifexp(tokens: &[PosnToken]) -> ParserResult<Box<IfExp<Parsed, String>>>
                         }),
                         tokens,
                     ))
-                })
+                }
             })
         })
     })
 }
 
 fn parse_body(tokens: &[PosnToken]) -> ParserResult<Body<Parsed, String>> {
-    token_lit(tokens, Token::LBrace).and_then(|(_, tokens)| {
-        many0(tokens, parse_statement).and_then(|(statements, tokens)| {
+    token_lit(tokens, Token::LBrace).and_then(|(_, tokens)| match many0(tokens, parse_statement) {
+        (statements, tokens) => {
             token_lit(tokens, Token::RBrace).map(|(_, tokens)| (Body { statements }, tokens))
-        })
+        }
     })
 }
 
@@ -339,17 +340,31 @@ fn parse_unary(tokens: &[PosnToken]) -> ParserResult<Box<Unary<Parsed, String>>>
             _ => throw_error("null".to_string(), tok.file_posn),
         })
         .or_else(|_| {
-            parse_primary(tokens)
-                .map(|(primary, tokens)| (Box::new(Unary::Primary(primary)), tokens))
+            parse_primary(tokens).map(|(primary, tokens)| match primary {
+                Primary::StringLit(s) => {
+                    let (mut rest, tokens) = many0(tokens, parse_primary);
+                    if rest.is_empty() {
+                        (
+                            Box::new(Unary::Primary(Box::new(Primary::StringLit(s)))),
+                            tokens,
+                        )
+                    } else {
+                        let mut append = vec![Primary::StringLit(s)];
+                        append.append(&mut rest);
+                        (Box::new(Unary::Append(append)), tokens)
+                    }
+                }
+                _ => (Box::new(Unary::Primary(Box::new(primary))), tokens),
+            })
         })
 }
 
-fn parse_primary(tokens: &[PosnToken]) -> ParserResult<Box<Primary<Parsed, String>>> {
+fn parse_primary(tokens: &[PosnToken]) -> ParserResult<Primary<Parsed, String>> {
     //println!("primary {:?}", tokens);
     item(tokens).and_then(|(tok, tokens)| {
         macro_rules! mk {
             ($result:expr) => {
-                Ok((Box::new($result), tokens))
+                Ok(($result, tokens))
             };
         }
 
@@ -362,7 +377,7 @@ fn parse_primary(tokens: &[PosnToken]) -> ParserResult<Box<Primary<Parsed, Strin
             Token::Variable(v) => mk!(Primary::Variable((), v.to_string())),
             Token::LParen => parse_expression(tokens).and_then(|(expression, tokens)| {
                 token_lit(tokens, Token::RParen)
-                    .map(|(_, tokens)| (Box::new(Primary::Paren(expression)), tokens))
+                    .map(|(_, tokens)| (Primary::Paren(expression), tokens))
             }),
             Token::Unit => mk!(Primary::Unit()),
             _ => bad_token(tok),

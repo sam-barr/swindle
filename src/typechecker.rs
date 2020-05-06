@@ -358,6 +358,19 @@ fn type_unary(
             SwindleType::Bool() => Ok((Box::new(Unary::Negate(u)), t)),
             _ => throw_error("can only not a boolean".to_string(), file_posn),
         }),
+        Unary::Append(append) => {
+            let mut typed_append = Vec::new();
+            for primary in append {
+                // we don't care about the types of the items of the append
+                // Note: in the future keeping track of the type may be neccesary
+                match type_primary(file_posn, types, primary) {
+                    Ok((p, _)) => typed_append.push(*p),
+                    Err(e) => return Err(e),
+                }
+            }
+
+            Ok((Box::new(Unary::Append(typed_append)), SwindleType::String()))
+        }
         Unary::Primary(primary) => {
             type_primary(file_posn, types, *primary).map(|(p, t)| (Box::new(Unary::Primary(p)), t))
         }
