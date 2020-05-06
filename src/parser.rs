@@ -190,31 +190,29 @@ fn parse_whileexp(tokens: &[PosnToken]) -> ParserResult<Box<WhileExp<Parsed, Str
 fn parse_ifexp(tokens: &[PosnToken]) -> ParserResult<Box<IfExp<Parsed, String>>> {
     token_lit(tokens, Token::If).and_then(|(_, tokens)| {
         parse_expression(tokens).and_then(|(cond, tokens)| {
-            parse_body(tokens).and_then(|(body, tokens)| match many0(tokens, parse_elif) {
-                (elifs, tokens) => {
-                    let (els, tokens) = token_lit(tokens, Token::Else)
-                        .and_then(|(_, tokens)| parse_body(tokens))
-                        .unwrap_or_else(|_| (Default::default(), tokens));
-                    Ok((
-                        Box::new(IfExp {
-                            cond,
-                            body,
-                            elifs,
-                            els,
-                        }),
-                        tokens,
-                    ))
-                }
+            parse_body(tokens).and_then(|(body, tokens)| {
+                let (elifs, tokens) = many0(tokens, parse_elif);
+                let (els, tokens) = token_lit(tokens, Token::Else)
+                    .and_then(|(_, tokens)| parse_body(tokens))
+                    .unwrap_or_else(|_| (Default::default(), tokens));
+                Ok((
+                    Box::new(IfExp {
+                        cond,
+                        body,
+                        elifs,
+                        els,
+                    }),
+                    tokens,
+                ))
             })
         })
     })
 }
 
 fn parse_body(tokens: &[PosnToken]) -> ParserResult<Body<Parsed, String>> {
-    token_lit(tokens, Token::LBrace).and_then(|(_, tokens)| match many0(tokens, parse_statement) {
-        (statements, tokens) => {
-            token_lit(tokens, Token::RBrace).map(|(_, tokens)| (Body { statements }, tokens))
-        }
+    token_lit(tokens, Token::LBrace).and_then(|(_, tokens)| {
+        let (statements, tokens) = many0(tokens, parse_statement);
+        token_lit(tokens, Token::RBrace).map(|(_, tokens)| (Body { statements }, tokens))
     })
 }
 

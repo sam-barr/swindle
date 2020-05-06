@@ -129,6 +129,7 @@ where
     Some(f())
 }
 
+#[allow(clippy::cognitive_complexity)]
 pub fn tokenize(source: &str) -> Result<Vec<PosnToken>, SwindleError> {
     let mut chars = TokenizerState::new(source);
     let mut tokens = Vec::new();

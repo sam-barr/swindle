@@ -1,3 +1,4 @@
+use std::default::Default;
 use std::fmt;
 
 #[derive(Debug, Copy, Clone)]
@@ -9,6 +10,12 @@ pub struct FilePosition {
 impl FilePosition {
     pub fn new() -> Self {
         FilePosition { line: 0, column: 0 }
+    }
+}
+
+impl Default for FilePosition {
+    fn default() -> Self {
+        FilePosition::new()
     }
 }
 

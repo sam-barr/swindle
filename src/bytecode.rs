@@ -42,7 +42,7 @@ pub enum ByteCodeOp {
     And, // 2pop, push
     Or,  // 2pop, push
 
-    Append, // usize pop, push
+    Append, // 2pop, push
 
     Assign,  // arg: UID, pop, push
     Declare, // arg: UID, pop, push

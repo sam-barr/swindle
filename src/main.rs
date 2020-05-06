@@ -37,7 +37,7 @@ fn main() {
 enum SwindleValue {
     Int(i64),
     ConstString(UID),
-    HeapString(usize),
+    HeapString(UID),
     Bool(bool),
     Unit,
 }
@@ -88,9 +88,55 @@ impl SwindleValue {
     }
 }
 
-//struct Heap {
-//    heap: HashMap<UID, String>
-//}
+#[derive(Debug)]
+struct Heap {
+    heap: HashMap<UID, (String, u32)>,
+    free_uids: Vec<UID>,
+    next_uid: UID,
+}
+
+impl Heap {
+    fn new() -> Self {
+        Heap {
+            heap: HashMap::new(),
+            free_uids: Vec::new(),
+            next_uid: UID::new(),
+        }
+    }
+
+    fn alloc(&mut self, string: String) -> UID {
+        let uid = match self.free_uids.pop() {
+            Some(uid) => uid,
+            None => {
+                let uid = self.next_uid;
+                self.next_uid.inc();
+                uid
+            }
+        };
+        self.heap.insert(uid, (string, 1));
+        uid
+    }
+
+    fn drop(&mut self, uid: UID) {
+        if let Some(pair) = self.heap.get_mut(&uid) {
+            pair.1 -= 1;
+            if pair.1 == 0 {
+                self.heap.remove(&uid).unwrap();
+                self.free_uids.push(uid);
+            }
+        }
+    }
+
+    fn access(&mut self, uid: UID) {
+        if let Some(pair) = self.heap.get_mut(&uid) {
+            pair.1 += 1;
+        }
+    }
+
+    fn get(&self, uid: UID) -> &String {
+        &self.heap.get(&uid).unwrap().0
+    }
+}
 
 struct VM {
     bytecode: Vec<ByteCodeOp>,
@@ -99,7 +145,7 @@ struct VM {
     variables: HashMap<UID, SwindleValue>,
     stack: Vec<SwindleValue>,
     labels: HashMap<UID, usize>,
-    heap: Vec<String>,
+    heap: Heap,
 }
 
 impl VM {
@@ -118,13 +164,21 @@ impl VM {
             variables: HashMap::new(),
             stack: Vec::new(),
             labels,
-            heap: Vec::new(),
+            heap: Heap::new(),
         }
     }
 
     fn debug(&self) {
         println!("~~~~~~~~VM~~~~~~~~");
-        println!("Current op: {:?}", self.bytecode[self.idx]);
+        print!("Current op: {:?}", self.bytecode[self.idx]);
+        match self.bytecode[self.idx] {
+            ByteCodeOp::StringConst
+            | ByteCodeOp::Variable
+            | ByteCodeOp::Assign
+            | ByteCodeOp::Declare
+            | ByteCodeOp::JumpIfFalse => println!("({:?})", self.bytecode[self.idx + 1]),
+            _ => println!(),
+        }
         println!("Variables: {:?}", self.variables);
         println!("Stack: {:?}", self.stack);
         println!("Heap: {:?}", self.heap);
@@ -134,7 +188,7 @@ impl VM {
     fn display(&self, value: SwindleValue) -> String {
         match value {
             SwindleValue::ConstString(uid) => self.strings.get(&uid).unwrap().to_string(),
-            SwindleValue::HeapString(idx) => self.heap[idx].to_string(),
+            SwindleValue::HeapString(uid) => self.heap.get(uid).to_string(),
             SwindleValue::Unit => "()".to_string(),
             SwindleValue::Int(n) => n.to_string(),
             SwindleValue::Bool(b) => b.to_string(),
@@ -147,6 +201,18 @@ impl VM {
 
     fn pop(&mut self) -> SwindleValue {
         self.stack.pop().unwrap()
+    }
+
+    fn drop(&mut self, value: SwindleValue) {
+        if let SwindleValue::HeapString(uid) = value {
+            self.heap.drop(uid);
+        }
+    }
+
+    fn access(&mut self, value: SwindleValue) {
+        if let SwindleValue::HeapString(uid) = value {
+            self.heap.access(uid);
+        }
     }
 
     fn run(mut self, debug: bool) {
@@ -169,7 +235,9 @@ impl VM {
                 ByteCodeOp::Variable => {
                     self.idx += 1;
                     if let ByteCodeOp::UID(uid) = self.bytecode[self.idx] {
-                        self.push(*self.variables.get(&uid).unwrap());
+                        let value = *self.variables.get(&uid).unwrap();
+                        self.push(value);
+                        self.access(value); // value in variable and on stack
                     }
                 }
                 ByteCodeOp::Unit => self.push(SwindleValue::Unit),
@@ -258,34 +326,44 @@ impl VM {
                 ByteCodeOp::Append => {
                     let s1 = self.pop();
                     let s2 = self.pop();
-                    let i = self.heap.len();
                     let s = format!("{}{}", self.display(s1), self.display(s2));
-                    self.heap.push(s);
-                    self.push(SwindleValue::HeapString(i));
+                    self.drop(s1);
+                    self.drop(s2);
+                    let uid = self.heap.alloc(s);
+                    self.push(SwindleValue::HeapString(uid));
                 }
 
                 ByteCodeOp::Declare => {
                     self.idx += 1;
                     if let ByteCodeOp::UID(uid) = self.bytecode[self.idx] {
                         let value = self.pop();
-                        self.variables.insert(uid, value);
+
+                        if let Some(old_value) = self.variables.insert(uid, value) {
+                            self.drop(old_value);
+                        }
                     }
                 }
                 ByteCodeOp::Assign => {
                     self.idx += 1;
                     if let ByteCodeOp::UID(uid) = self.bytecode[self.idx] {
                         let value = self.pop();
-                        self.variables.insert(uid, value);
+
+                        if let Some(old_value) = self.variables.insert(uid, value) {
+                            self.drop(old_value);
+                        }
                         self.push(value); // assignment returns the assigned value
+                        self.access(value); // value is now in variable and on the stack
                     }
                 }
                 ByteCodeOp::Write => {
                     let v = self.pop();
                     print!("{}", self.display(v));
+                    self.drop(v);
                 }
                 ByteCodeOp::Writeln => {
                     let v = self.pop();
                     println!("{}", self.display(v));
+                    self.drop(v);
                 }
 
                 ByteCodeOp::Label(_) => {}
