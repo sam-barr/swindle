@@ -300,7 +300,23 @@ impl VM {
                 ByteCodeOp::Eq => {
                     let a = self.pop();
                     let b = self.pop();
-                    self.push(SwindleValue::Bool(a == b));
+                    let s1 = match a {
+                        SwindleValue::HeapString(uid) => self.heap.get(uid),
+                        SwindleValue::ConstString(uid) => self.strings.get(&uid).unwrap(),
+                        _ => {
+                            self.push(SwindleValue::Bool(a == b));
+                            continue;
+                        }
+                    };
+                    let s2 = match b {
+                        SwindleValue::HeapString(uid) => self.heap.get(uid),
+                        SwindleValue::ConstString(uid) => self.strings.get(&uid).unwrap(),
+                        _ => panic!(),
+                    };
+                    let eq = s1 == s2;
+                    self.push(SwindleValue::Bool(eq));
+                    self.drop(a);
+                    self.drop(b);
                 }
                 ByteCodeOp::Neq => {
                     let a = self.pop();
