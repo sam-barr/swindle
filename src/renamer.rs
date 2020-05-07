@@ -228,6 +228,6 @@ fn rename_primary(
         Primary::StringLit(s) => Primary::StringLit(s),
         Primary::BoolLit(b) => Primary::BoolLit(b),
         Primary::Variable(t, varname) => Primary::Variable(t, name_table.get(&varname)),
-        Primary::Unit() => Primary::Unit(),
+        Primary::Unit => Primary::Unit,
     })
 }

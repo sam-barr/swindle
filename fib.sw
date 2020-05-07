@@ -1,6 +1,6 @@
 int n = 50;
 
-int prev = 1;
+int prev = 1; // this is a comment
 int curr = 1;
 
 int i = 0;

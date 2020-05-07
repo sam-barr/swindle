@@ -16,10 +16,10 @@ impl Tag for Typed {
 // copy and clone might not work in the future
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum SwindleType {
-    Int(),
-    String(),
-    Bool(),
-    Unit(),
+    Int,
+    String,
+    Bool,
+    Unit,
 }
 
 type TypeMap = HashMap<String, SwindleType>;
@@ -59,7 +59,7 @@ fn type_statement(
                 type_expression(file_posn, types, *expression).and_then(|(e, t)| {
                     if type_matches_swindle_type(typ, t) {
                         types.insert(varname.to_string(), t);
-                        Ok((Statement::Declare(typ, varname, e), SwindleType::Unit()))
+                        Ok((Statement::Declare(typ, varname, e), SwindleType::Unit))
                     } else {
                         throw_error("bad types for declare".to_string(), file_posn)
                     }
@@ -67,9 +67,9 @@ fn type_statement(
             }
         }
         Statement::Write((), expression) => type_expression(file_posn, types, *expression)
-            .map(|(e, t)| (Statement::Write(t, e), SwindleType::Unit())),
+            .map(|(e, t)| (Statement::Write(t, e), SwindleType::Unit)),
         Statement::Writeln((), expression) => type_expression(file_posn, types, *expression)
-            .map(|(e, t)| (Statement::Writeln(t, e), SwindleType::Unit())),
+            .map(|(e, t)| (Statement::Writeln(t, e), SwindleType::Unit)),
         Statement::Expression(expression) => type_expression(file_posn, types, *expression)
             .map(|(e, t)| (Statement::Expression(e), t)),
     }
@@ -77,10 +77,10 @@ fn type_statement(
 
 fn type_matches_swindle_type(typ: Type, swindle: SwindleType) -> bool {
     match (typ, swindle) {
-        (Type::Int(), SwindleType::Int()) => true,
-        (Type::String(), SwindleType::String()) => true,
-        (Type::Bool(), SwindleType::Bool()) => true,
-        (Type::Unit(), SwindleType::Unit()) => true,
+        (Type::Int, SwindleType::Int) => true,
+        (Type::String, SwindleType::String) => true,
+        (Type::Bool, SwindleType::Bool) => true,
+        (Type::Unit, SwindleType::Unit) => true,
         _ => false,
     }
 }
@@ -118,7 +118,7 @@ fn parse_whileexp(
     whileexp: WhileExp<Parsed, String>,
 ) -> TyperResult<(Box<WhileExp<Typed, String>>, SwindleType)> {
     let cond = match type_expression(file_posn, types, *whileexp.cond) {
-        Ok((cond, SwindleType::Bool())) => cond,
+        Ok((cond, SwindleType::Bool)) => cond,
         Err(e) => return Err(e),
         _ => return throw_error("while condition must be a bool".to_string(), file_posn),
     };
@@ -128,7 +128,7 @@ fn parse_whileexp(
         Err(e) => return Err(e),
     };
 
-    Ok((Box::new(WhileExp { cond, body }), SwindleType::Unit()))
+    Ok((Box::new(WhileExp { cond, body }), SwindleType::Unit))
 }
 
 fn parse_ifexp(
@@ -137,7 +137,7 @@ fn parse_ifexp(
     ifexp: IfExp<Parsed, String>,
 ) -> TyperResult<(Box<IfExp<Typed, String>>, SwindleType)> {
     let cond = match type_expression(file_posn, types, *ifexp.cond) {
-        Ok((cond, SwindleType::Bool())) => cond,
+        Ok((cond, SwindleType::Bool)) => cond,
         Err(e) => return Err(e),
         _ => return throw_error("if condition must be bool".to_string(), file_posn),
     };
@@ -189,7 +189,7 @@ fn type_elif(
     elif: Elif<Parsed, String>,
 ) -> TyperResult<(Elif<Typed, String>, SwindleType)> {
     let cond = match type_expression(file_posn, types, *elif.cond) {
-        Ok((cond, SwindleType::Bool())) => cond,
+        Ok((cond, SwindleType::Bool)) => cond,
         Err(e) => return Err(e),
         _ => return throw_error("if condition must be bool".to_string(), file_posn),
     };
@@ -208,7 +208,7 @@ fn type_body(
     body: Body<Parsed, String>,
 ) -> TyperResult<(Body<Typed, String>, SwindleType)> {
     let mut types = types.clone();
-    let mut body_type = SwindleType::Unit();
+    let mut body_type = SwindleType::Unit;
     let mut statements = Vec::new();
 
     for stmt in body.statements {
@@ -232,8 +232,8 @@ fn type_orexp(
     match orexp {
         OrExp::Or(andexp, orexp) => type_andexp(file_posn, types, *andexp).and_then(|(a, ta)| {
             type_orexp(file_posn, types, *orexp).and_then(|(o, to)| match (ta, to) {
-                (SwindleType::Bool(), SwindleType::Bool()) => {
-                    Ok((Box::new(OrExp::Or(a, o)), SwindleType::Bool()))
+                (SwindleType::Bool, SwindleType::Bool) => {
+                    Ok((Box::new(OrExp::Or(a, o)), SwindleType::Bool))
                 }
                 _ => throw_error("bad types for or".to_string(), file_posn),
             })
@@ -253,8 +253,8 @@ fn type_andexp(
         AndExp::And(compexp, andexp) => {
             type_compexp(file_posn, types, *compexp).and_then(|(c, tc)| {
                 type_andexp(file_posn, types, *andexp).and_then(|(a, ta)| match (tc, ta) {
-                    (SwindleType::Bool(), SwindleType::Bool()) => {
-                        Ok((Box::new(AndExp::And(c, a)), SwindleType::Bool()))
+                    (SwindleType::Bool, SwindleType::Bool) => {
+                        Ok((Box::new(AndExp::And(c, a)), SwindleType::Bool))
                     }
                     _ => throw_error("bad types for and".to_string(), file_posn),
                 })
@@ -275,7 +275,7 @@ fn type_compexp(
         CompExp::Comp(compop, addexp1, addexp2) => type_addexp(file_posn, types, *addexp1)
             .and_then(|(a1, t1)| {
                 type_addexp(file_posn, types, *addexp2).and_then(|(a2, t2)| {
-                    let result = (Box::new(CompExp::Comp(compop, a1, a2)), SwindleType::Bool());
+                    let result = (Box::new(CompExp::Comp(compop, a1, a2)), SwindleType::Bool);
                     match compop {
                         CompOp::Eq | CompOp::Neq => {
                             if t1 == t2 {
@@ -288,7 +288,7 @@ fn type_compexp(
                             }
                         }
                         _ => match (t1, t2) {
-                            (SwindleType::Int(), SwindleType::Int()) => Ok(result),
+                            (SwindleType::Int, SwindleType::Int) => Ok(result),
                             _ => throw_error("can only compare integers".to_string(), file_posn),
                         },
                     }
@@ -309,8 +309,8 @@ fn type_addexp(
         AddExp::Add(addop, mulexp, addexp) => {
             type_mulexp(file_posn, types, *mulexp).and_then(|(m, tm)| {
                 type_addexp(file_posn, types, *addexp).and_then(|(a, ta)| match (tm, ta) {
-                    (SwindleType::Int(), SwindleType::Int()) => {
-                        Ok((Box::new(AddExp::Add(addop, m, a)), SwindleType::Int()))
+                    (SwindleType::Int, SwindleType::Int) => {
+                        Ok((Box::new(AddExp::Add(addop, m, a)), SwindleType::Int))
                     }
                     _ => throw_error("bad types for addition".to_string(), file_posn),
                 })
@@ -331,8 +331,8 @@ fn type_mulexp(
         MulExp::Mul(mulop, unary, mulexp) => {
             type_unary(file_posn, types, *unary).and_then(|(u, tu)| {
                 type_mulexp(file_posn, types, *mulexp).and_then(|(m, tm)| match (tu, tm) {
-                    (SwindleType::Int(), SwindleType::Int()) => {
-                        Ok((Box::new(MulExp::Mul(mulop, u, m)), SwindleType::Int()))
+                    (SwindleType::Int, SwindleType::Int) => {
+                        Ok((Box::new(MulExp::Mul(mulop, u, m)), SwindleType::Int))
                     }
                     _ => throw_error("bad types for multiplication".to_string(), file_posn),
                 })
@@ -351,11 +351,11 @@ fn type_unary(
 ) -> TyperResult<(Box<Unary<Typed, String>>, SwindleType)> {
     match unary {
         Unary::Negate(unary) => type_unary(file_posn, types, *unary).and_then(|(u, t)| match t {
-            SwindleType::Int() => Ok((Box::new(Unary::Negate(u)), t)),
+            SwindleType::Int => Ok((Box::new(Unary::Negate(u)), t)),
             _ => throw_error("can only negate integers".to_string(), file_posn),
         }),
         Unary::Not(unary) => type_unary(file_posn, types, *unary).and_then(|(u, t)| match t {
-            SwindleType::Bool() => Ok((Box::new(Unary::Negate(u)), t)),
+            SwindleType::Bool => Ok((Box::new(Unary::Negate(u)), t)),
             _ => throw_error("can only not a boolean".to_string(), file_posn),
         }),
         Unary::Stringify(primaries) => {
@@ -371,7 +371,7 @@ fn type_unary(
 
             Ok((
                 Box::new(Unary::Stringify(typed_primaries)),
-                SwindleType::String(),
+                SwindleType::String,
             ))
         }
         Unary::Primary(primary) => {
@@ -388,13 +388,13 @@ fn type_primary(
     match primary {
         Primary::Paren(expression) => type_expression(file_posn, types, *expression)
             .map(|(e, t)| (Box::new(Primary::Paren(e)), t)),
-        Primary::IntLit(n) => Ok((Box::new(Primary::IntLit(n)), SwindleType::Int())),
-        Primary::StringLit(s) => Ok((Box::new(Primary::StringLit(s)), SwindleType::String())),
-        Primary::BoolLit(b) => Ok((Box::new(Primary::BoolLit(b)), SwindleType::Bool())),
+        Primary::IntLit(n) => Ok((Box::new(Primary::IntLit(n)), SwindleType::Int)),
+        Primary::StringLit(s) => Ok((Box::new(Primary::StringLit(s)), SwindleType::String)),
+        Primary::BoolLit(b) => Ok((Box::new(Primary::BoolLit(b)), SwindleType::Bool)),
         Primary::Variable((), varname) => match types.get(&varname) {
             Some(typ) => Ok((Box::new(Primary::Variable(*typ, varname)), *typ)),
             None => throw_error(format!("undeclared variable: {}", varname), file_posn),
         },
-        Primary::Unit() => Ok((Box::new(Primary::Unit()), SwindleType::Unit())),
+        Primary::Unit => Ok((Box::new(Primary::Unit), SwindleType::Unit)),
     }
 }

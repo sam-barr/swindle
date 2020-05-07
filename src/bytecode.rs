@@ -391,6 +391,6 @@ fn byte_primary(
         Primary::StringLit(s) => vec![ByteCodeOp::StringConst, ByteCodeOp::UID(strings.get(s))],
         Primary::BoolLit(b) => vec![ByteCodeOp::BoolConst(b)],
         Primary::Variable(_, uid) => vec![ByteCodeOp::Variable, ByteCodeOp::UID(uid)],
-        Primary::Unit() => vec![ByteCodeOp::Unit],
+        Primary::Unit => vec![ByteCodeOp::Unit],
     }
 }

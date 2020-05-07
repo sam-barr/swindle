@@ -45,6 +45,8 @@ pub enum Token {
     Elif,
     Else,
     While,
+    Break,
+    Continue,
 }
 
 #[derive(Debug, Clone)]
@@ -166,6 +168,8 @@ pub fn tokenize(source: &str) -> Result<Vec<PosnToken>, SwindleError> {
         try_lex!("elif", Elif);
         try_lex!("else", Else);
         try_lex!("while", While);
+        try_lex!("break", Break);
+        try_lex!("continue", Continue);
 
         let posn = chars.file_posn;
         let c = match chars.next() {
@@ -174,7 +178,20 @@ pub fn tokenize(source: &str) -> Result<Vec<PosnToken>, SwindleError> {
         };
 
         if c == '/' {
-            tokens.push(PosnToken::new(Token::Quotient, posn));
+            match chars.next() {
+                Some('/') => loop {
+                    match chars.next() {
+                        Some('\n') => break,
+                        None => break,
+                        _ => continue,
+                    }
+                },
+                Some(c) => {
+                    chars.push(c);
+                    tokens.push(PosnToken::new(Token::Quotient, posn));
+                }
+                _ => tokens.push(PosnToken::new(Token::Quotient, posn)),
+            }
         } else if c == '*' {
             tokens.push(PosnToken::new(Token::Product, posn));
         } else if c == '%' {

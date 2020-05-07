@@ -43,15 +43,17 @@ where
     Declare(Type, ID, Box<Expression<T, ID>>),
     Write(T::WriteTag, Box<Expression<T, ID>>),
     Writeln(T::WriteTag, Box<Expression<T, ID>>),
+    //Break,
+    //Continue,
     Expression(Box<Expression<T, ID>>),
 }
 
 #[derive(Debug, Copy, Clone)]
 pub enum Type {
-    Int(),
-    String(),
-    Bool(),
-    Unit(),
+    Int,
+    String,
+    Bool,
+    Unit,
 }
 
 // make this a tagged statement?
@@ -203,7 +205,7 @@ where
     StringLit(String),
     BoolLit(bool),
     Variable(T::VariableTag, ID),
-    Unit(),
+    Unit,
     //Deref(Expression<Tag, ID>),
     //Tuple(Vec<Expression<Tag, ID>>),
 }

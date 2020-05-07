@@ -157,10 +157,10 @@ fn parse_statement(tokens: &[PosnToken]) -> ParserResult<Statement<Parsed, Strin
 fn parse_type(tokens: &[PosnToken]) -> ParserResult<Type> {
     //println!("type {:?}", tokens);
     item(tokens).and_then(|(tok, tokens)| match tok.token {
-        Token::IntType => Ok((Type::Int(), tokens)),
-        Token::StringType => Ok((Type::String(), tokens)),
-        Token::BoolType => Ok((Type::Bool(), tokens)),
-        Token::Unit => Ok((Type::Unit(), tokens)),
+        Token::IntType => Ok((Type::Int, tokens)),
+        Token::StringType => Ok((Type::String, tokens)),
+        Token::BoolType => Ok((Type::Bool, tokens)),
+        Token::Unit => Ok((Type::Unit, tokens)),
         _ => bad_token(tok),
     })
 }
@@ -378,7 +378,7 @@ fn parse_primary(tokens: &[PosnToken]) -> ParserResult<Primary<Parsed, String>> 
                 token_lit(tokens, Token::RParen)
                     .map(|(_, tokens)| (Primary::Paren(expression), tokens))
             }),
-            Token::Unit => mk!(Primary::Unit()),
+            Token::Unit => mk!(Primary::Unit),
             _ => bad_token(tok),
         }
     })
