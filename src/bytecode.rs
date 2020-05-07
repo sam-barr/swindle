@@ -54,42 +54,49 @@ pub enum ByteCodeOp {
     Jump,        // pop
 }
 
-struct StringTable {
-    ids: HashMap<String, UID>,
-    next_id: UID,
+struct CodeGenState {
+    string_ids: HashMap<String, UID>,
+    next_string_id: UID,
+    next_label: UID,
+    break_label: UID,
+    continue_label: UID,
 }
 
-impl StringTable {
+impl CodeGenState {
     fn new() -> Self {
-        StringTable {
-            ids: HashMap::new(),
-            next_id: UID::new(),
+        CodeGenState {
+            string_ids: HashMap::new(),
+            next_string_id: UID::new(),
+            next_label: UID::new(),
+            break_label: Default::default(),
+            continue_label: Default::default(),
         }
     }
 
     fn get(&mut self, string: String) -> UID {
-        match self.ids.get(&string) {
+        match self.string_ids.get(&string) {
             Some(uid) => *uid,
             None => {
-                self.ids.insert(string, self.next_id);
-                let new_id = self.next_id;
-                self.next_id.inc();
+                self.string_ids.insert(string, self.next_string_id);
+                let new_id = self.next_string_id;
+                self.next_string_id.inc();
                 new_id
             }
         }
     }
+
+    fn get_label(&mut self) -> UID {
+        let label = self.next_label;
+        self.next_label.inc();
+        label
+    }
 }
 
 pub fn byte_program(program: Program<Typed, UID>) -> (Vec<ByteCodeOp>, HashMap<UID, String>) {
-    let mut strings = StringTable::new();
+    let mut state = CodeGenState::new();
     let mut bytecode = Vec::new();
-    let mut label = UID::new();
     for tagged_stmt in program.statements {
-        bytecode.append(&mut byte_statement(
-            &mut label,
-            &mut strings,
-            tagged_stmt.statement,
-        ));
+        bytecode.append(&mut byte_statement(&mut state, tagged_stmt.statement));
 
         // all statements push a value onto the stack
         // so we pop them off
@@ -97,22 +104,18 @@ pub fn byte_program(program: Program<Typed, UID>) -> (Vec<ByteCodeOp>, HashMap<U
     }
 
     let mut string_map = HashMap::new();
-    for (string, uid) in strings.ids {
+    for (string, uid) in state.string_ids {
         string_map.insert(uid, string);
     }
 
     (bytecode, string_map)
 }
 
-fn byte_statement(
-    label: &mut UID,
-    strings: &mut StringTable,
-    statement: Statement<Typed, UID>,
-) -> Vec<ByteCodeOp> {
+fn byte_statement(state: &mut CodeGenState, statement: Statement<Typed, UID>) -> Vec<ByteCodeOp> {
     match statement {
         Statement::Declare(_, uid, expression) => {
             let mut bc = Vec::new();
-            bc.append(&mut byte_expression(label, strings, *expression));
+            bc.append(&mut byte_expression(state, *expression));
             bc.push(ByteCodeOp::Declare);
             bc.push(ByteCodeOp::UID(uid));
             bc.push(ByteCodeOp::Unit); // All the non-expression statements return unit
@@ -120,122 +123,110 @@ fn byte_statement(
         }
         Statement::Write(_, expression) => {
             let mut bc = Vec::new();
-            bc.append(&mut byte_expression(label, strings, *expression));
+            bc.append(&mut byte_expression(state, *expression));
             bc.push(ByteCodeOp::Write);
             bc.push(ByteCodeOp::Unit);
             bc
         }
         Statement::Writeln(_, expression) => {
             let mut bc = Vec::new();
-            bc.append(&mut byte_expression(label, strings, *expression));
+            bc.append(&mut byte_expression(state, *expression));
             bc.push(ByteCodeOp::Writeln);
             bc.push(ByteCodeOp::Unit);
             bc
         }
-        Statement::Expression(expression) => byte_expression(label, strings, *expression),
+        Statement::Break => vec![ByteCodeOp::Jump, ByteCodeOp::UID(state.break_label)],
+        Statement::Continue => vec![ByteCodeOp::Jump, ByteCodeOp::UID(state.continue_label)],
+        Statement::Expression(expression) => byte_expression(state, *expression),
     }
 }
 
 fn byte_expression(
-    label: &mut UID,
-    strings: &mut StringTable,
+    state: &mut CodeGenState,
     expression: Expression<Typed, UID>,
 ) -> Vec<ByteCodeOp> {
     match expression {
         Expression::Assign(uid, expression) => {
             let mut bc = Vec::new();
-            bc.append(&mut byte_expression(label, strings, *expression));
+            bc.append(&mut byte_expression(state, *expression));
             bc.push(ByteCodeOp::Assign);
             bc.push(ByteCodeOp::UID(uid));
             bc
         }
-        Expression::WhileExp(whileexp) => byte_whileexp(label, strings, *whileexp),
-        Expression::IfExp(ifexp) => byte_ifexp(label, strings, *ifexp),
-        Expression::OrExp(orexp) => byte_orexp(label, strings, *orexp),
+        Expression::WhileExp(whileexp) => byte_whileexp(state, *whileexp),
+        Expression::IfExp(ifexp) => byte_ifexp(state, *ifexp),
+        Expression::OrExp(orexp) => byte_orexp(state, *orexp),
     }
 }
 
-fn byte_whileexp(
-    label: &mut UID,
-    strings: &mut StringTable,
-    whileexp: WhileExp<Typed, UID>,
-) -> Vec<ByteCodeOp> {
-    let start_label = *label;
-    label.inc();
-    let end_label = *label;
-    label.inc();
+fn byte_whileexp(state: &mut CodeGenState, whileexp: WhileExp<Typed, UID>) -> Vec<ByteCodeOp> {
+    let old_continue_label = state.continue_label;
+    let old_break_label = state.break_label;
+    let start_label = state.get_label();
+    let end_label = state.get_label();
+    state.continue_label = start_label;
+    state.break_label = end_label;
 
     let mut bc = Vec::new();
     bc.push(ByteCodeOp::Label(start_label));
-    bc.append(&mut byte_expression(label, strings, *whileexp.cond));
+    bc.append(&mut byte_expression(state, *whileexp.cond));
     bc.push(ByteCodeOp::JumpIfFalse);
     bc.push(ByteCodeOp::UID(end_label));
-    bc.append(&mut byte_body(label, strings, whileexp.body));
+    bc.append(&mut byte_body(state, whileexp.body));
     bc.push(ByteCodeOp::Pop);
     bc.push(ByteCodeOp::Jump);
     bc.push(ByteCodeOp::UID(start_label));
     bc.push(ByteCodeOp::Label(end_label));
     bc.push(ByteCodeOp::Unit);
 
+    state.continue_label = old_continue_label;
+    state.break_label = old_break_label;
+
     bc
 }
 
-fn byte_ifexp(
-    label: &mut UID,
-    strings: &mut StringTable,
-    ifexp: IfExp<Typed, UID>,
-) -> Vec<ByteCodeOp> {
-    let end_label = *label;
-    label.inc();
+fn byte_ifexp(state: &mut CodeGenState, ifexp: IfExp<Typed, UID>) -> Vec<ByteCodeOp> {
+    let end_label = state.get_label();
+    let label = state.get_label();
 
     let mut bc = Vec::new();
-    bc.append(&mut byte_expression(label, strings, *ifexp.cond));
+    bc.append(&mut byte_expression(state, *ifexp.cond));
     bc.push(ByteCodeOp::JumpIfFalse);
-    bc.push(ByteCodeOp::UID(*label));
-    bc.append(&mut byte_body(label, strings, ifexp.body));
+    bc.push(ByteCodeOp::UID(label));
+    bc.append(&mut byte_body(state, ifexp.body));
     bc.push(ByteCodeOp::Jump);
     bc.push(ByteCodeOp::UID(end_label));
-    bc.push(ByteCodeOp::Label(*label));
-    label.inc();
+    bc.push(ByteCodeOp::Label(label));
 
     for elif in ifexp.elifs {
-        bc.append(&mut byte_elif(end_label, label, strings, elif));
+        bc.append(&mut byte_elif(end_label, state, elif));
     }
 
-    bc.append(&mut byte_body(label, strings, ifexp.els));
+    bc.append(&mut byte_body(state, ifexp.els));
     bc.push(ByteCodeOp::Label(end_label));
 
     bc
 }
 
-fn byte_elif(
-    end_label: UID,
-    label: &mut UID,
-    strings: &mut StringTable,
-    elif: Elif<Typed, UID>,
-) -> Vec<ByteCodeOp> {
+fn byte_elif(end_label: UID, state: &mut CodeGenState, elif: Elif<Typed, UID>) -> Vec<ByteCodeOp> {
+    let label = state.get_label();
     let mut bc = Vec::new();
-    bc.append(&mut byte_expression(label, strings, *elif.cond));
+    bc.append(&mut byte_expression(state, *elif.cond));
     bc.push(ByteCodeOp::JumpIfFalse);
-    bc.push(ByteCodeOp::UID(*label));
-    bc.append(&mut byte_body(label, strings, elif.body));
+    bc.push(ByteCodeOp::UID(label));
+    bc.append(&mut byte_body(state, elif.body));
     bc.push(ByteCodeOp::Jump);
     bc.push(ByteCodeOp::UID(end_label));
-    bc.push(ByteCodeOp::Label(*label));
-    label.inc();
+    bc.push(ByteCodeOp::Label(label));
 
     bc
 }
 
-fn byte_body(
-    label: &mut UID,
-    strings: &mut StringTable,
-    body: Body<Typed, UID>,
-) -> Vec<ByteCodeOp> {
+fn byte_body(state: &mut CodeGenState, body: Body<Typed, UID>) -> Vec<ByteCodeOp> {
     let mut bc = Vec::new();
     if !body.statements.is_empty() {
         for stmt in body.statements {
-            bc.append(&mut byte_statement(label, strings, stmt));
+            bc.append(&mut byte_statement(state, stmt));
             bc.push(ByteCodeOp::Pop);
         }
         // remove the last pop, becaue the last statement is the value we return
@@ -246,50 +237,38 @@ fn byte_body(
     bc
 }
 
-fn byte_orexp(
-    label: &mut UID,
-    strings: &mut StringTable,
-    orexp: OrExp<Typed, UID>,
-) -> Vec<ByteCodeOp> {
+fn byte_orexp(state: &mut CodeGenState, orexp: OrExp<Typed, UID>) -> Vec<ByteCodeOp> {
     match orexp {
         OrExp::Or(andexp, orexp) => {
             let mut bc = Vec::new();
-            bc.append(&mut byte_orexp(label, strings, *orexp));
-            bc.append(&mut byte_andexp(label, strings, *andexp));
+            bc.append(&mut byte_orexp(state, *orexp));
+            bc.append(&mut byte_andexp(state, *andexp));
             bc.push(ByteCodeOp::Or);
             bc
         }
-        OrExp::AndExp(andexp) => byte_andexp(label, strings, *andexp),
+        OrExp::AndExp(andexp) => byte_andexp(state, *andexp),
     }
 }
 
-fn byte_andexp(
-    label: &mut UID,
-    strings: &mut StringTable,
-    andexp: AndExp<Typed, UID>,
-) -> Vec<ByteCodeOp> {
+fn byte_andexp(state: &mut CodeGenState, andexp: AndExp<Typed, UID>) -> Vec<ByteCodeOp> {
     match andexp {
         AndExp::And(compexp, andexp) => {
             let mut bc = Vec::new();
-            bc.append(&mut byte_andexp(label, strings, *andexp));
-            bc.append(&mut byte_compexp(label, strings, *compexp));
+            bc.append(&mut byte_andexp(state, *andexp));
+            bc.append(&mut byte_compexp(state, *compexp));
             bc.push(ByteCodeOp::And);
             bc
         }
-        AndExp::CompExp(compexp) => byte_compexp(label, strings, *compexp),
+        AndExp::CompExp(compexp) => byte_compexp(state, *compexp),
     }
 }
 
-fn byte_compexp(
-    label: &mut UID,
-    strings: &mut StringTable,
-    compexp: CompExp<Typed, UID>,
-) -> Vec<ByteCodeOp> {
+fn byte_compexp(state: &mut CodeGenState, compexp: CompExp<Typed, UID>) -> Vec<ByteCodeOp> {
     match compexp {
         CompExp::Comp(compop, addexp1, addexp2) => {
             let mut bc = Vec::new();
-            bc.append(&mut byte_addexp(label, strings, *addexp2));
-            bc.append(&mut byte_addexp(label, strings, *addexp1));
+            bc.append(&mut byte_addexp(state, *addexp2));
+            bc.append(&mut byte_addexp(state, *addexp1));
             match compop {
                 CompOp::Leq => bc.push(ByteCodeOp::Leq),
                 CompOp::Lt => bc.push(ByteCodeOp::Lt),
@@ -303,40 +282,32 @@ fn byte_compexp(
             }
             bc
         }
-        CompExp::AddExp(addexp) => byte_addexp(label, strings, *addexp),
+        CompExp::AddExp(addexp) => byte_addexp(state, *addexp),
     }
 }
 
-fn byte_addexp(
-    label: &mut UID,
-    strings: &mut StringTable,
-    addexp: AddExp<Typed, UID>,
-) -> Vec<ByteCodeOp> {
+fn byte_addexp(state: &mut CodeGenState, addexp: AddExp<Typed, UID>) -> Vec<ByteCodeOp> {
     match addexp {
         AddExp::Add(addop, mulexp, addexp) => {
             let mut bc = Vec::new();
-            bc.append(&mut byte_addexp(label, strings, *addexp));
-            bc.append(&mut byte_mulexp(label, strings, *mulexp));
+            bc.append(&mut byte_addexp(state, *addexp));
+            bc.append(&mut byte_mulexp(state, *mulexp));
             bc.push(match addop {
                 AddOp::Sum => ByteCodeOp::Sum,
                 AddOp::Difference => ByteCodeOp::Difference,
             });
             bc
         }
-        AddExp::MulExp(mulexp) => byte_mulexp(label, strings, *mulexp),
+        AddExp::MulExp(mulexp) => byte_mulexp(state, *mulexp),
     }
 }
 
-fn byte_mulexp(
-    label: &mut UID,
-    strings: &mut StringTable,
-    mulexp: MulExp<Typed, UID>,
-) -> Vec<ByteCodeOp> {
+fn byte_mulexp(state: &mut CodeGenState, mulexp: MulExp<Typed, UID>) -> Vec<ByteCodeOp> {
     match mulexp {
         MulExp::Mul(mulop, unary, mulexp) => {
             let mut bc = Vec::new();
-            bc.append(&mut byte_mulexp(label, strings, *mulexp));
-            bc.append(&mut byte_unary(label, strings, *unary));
+            bc.append(&mut byte_mulexp(state, *mulexp));
+            bc.append(&mut byte_unary(state, *unary));
             bc.push(match mulop {
                 MulOp::Product => ByteCodeOp::Product,
                 MulOp::Quotient => ByteCodeOp::Quotient,
@@ -344,34 +315,30 @@ fn byte_mulexp(
             });
             bc
         }
-        MulExp::Unary(unary) => byte_unary(label, strings, *unary),
+        MulExp::Unary(unary) => byte_unary(state, *unary),
     }
 }
 
-fn byte_unary(
-    label: &mut UID,
-    strings: &mut StringTable,
-    unary: Unary<Typed, UID>,
-) -> Vec<ByteCodeOp> {
+fn byte_unary(state: &mut CodeGenState, unary: Unary<Typed, UID>) -> Vec<ByteCodeOp> {
     match unary {
         Unary::Negate(unary) => {
             let mut bc = Vec::new();
-            bc.append(&mut byte_unary(label, strings, *unary));
+            bc.append(&mut byte_unary(state, *unary));
             bc.push(ByteCodeOp::Negate);
             bc
         }
         Unary::Not(unary) => {
             let mut bc = Vec::new();
-            bc.append(&mut byte_unary(label, strings, *unary));
+            bc.append(&mut byte_unary(state, *unary));
             bc.push(ByteCodeOp::Not);
             bc
         }
-        Unary::Primary(primary) => byte_primary(label, strings, *primary),
+        Unary::Primary(primary) => byte_primary(state, *primary),
         Unary::Stringify(mut primaries) => {
-            let mut bc = byte_primary(label, strings, primaries.pop().unwrap());
+            let mut bc = byte_primary(state, primaries.pop().unwrap());
             bc.push(ByteCodeOp::Stringify);
             while let Some(primary) = primaries.pop() {
-                bc.append(&mut byte_primary(label, strings, primary));
+                bc.append(&mut byte_primary(state, primary));
                 bc.push(ByteCodeOp::Stringify);
                 bc.push(ByteCodeOp::Append);
             }
@@ -380,15 +347,11 @@ fn byte_unary(
     }
 }
 
-fn byte_primary(
-    label: &mut UID,
-    strings: &mut StringTable,
-    primary: Primary<Typed, UID>,
-) -> Vec<ByteCodeOp> {
+fn byte_primary(state: &mut CodeGenState, primary: Primary<Typed, UID>) -> Vec<ByteCodeOp> {
     match primary {
-        Primary::Paren(expression) => byte_expression(label, strings, *expression),
+        Primary::Paren(expression) => byte_expression(state, *expression),
         Primary::IntLit(n) => vec![ByteCodeOp::IntConst(n)],
-        Primary::StringLit(s) => vec![ByteCodeOp::StringConst, ByteCodeOp::UID(strings.get(s))],
+        Primary::StringLit(s) => vec![ByteCodeOp::StringConst, ByteCodeOp::UID(state.get(s))],
         Primary::BoolLit(b) => vec![ByteCodeOp::BoolConst(b)],
         Primary::Variable(_, uid) => vec![ByteCodeOp::Variable, ByteCodeOp::UID(uid)],
         Primary::Unit => vec![ByteCodeOp::Unit],

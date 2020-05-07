@@ -1,4 +1,15 @@
-// this is a comment
+int n = 0;
 
-// and this is division:
-writeln 4 / 2;
+while true {
+    if n == 4 {
+        n = n + 1;
+        continue;
+    } elif n == 8 {
+        break;
+    };
+
+    writeln n;
+    n = n + 1;
+};
+
+writeln "done";

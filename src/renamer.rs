@@ -82,6 +82,8 @@ fn rename_statement(
         Statement::Writeln(tag, expression) => {
             Statement::Writeln(tag, rename_expression(name_table, *expression))
         }
+        Statement::Break => Statement::Break,
+        Statement::Continue => Statement::Continue,
         Statement::Expression(expression) => {
             Statement::Expression(rename_expression(name_table, *expression))
         }

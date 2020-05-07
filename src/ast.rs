@@ -13,7 +13,6 @@ pub struct Program<T, ID>
 where
     T: Tag,
 {
-    //pub statements: Vec<(T::StatementTag, Box<Statement<T, ID>>)>,
     pub statements: Vec<TaggedStatement<T, ID>>,
 }
 
@@ -43,8 +42,8 @@ where
     Declare(Type, ID, Box<Expression<T, ID>>),
     Write(T::WriteTag, Box<Expression<T, ID>>),
     Writeln(T::WriteTag, Box<Expression<T, ID>>),
-    //Break,
-    //Continue,
+    Break,
+    Continue,
     Expression(Box<Expression<T, ID>>),
 }
 
