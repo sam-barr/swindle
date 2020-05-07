@@ -268,7 +268,7 @@ pub fn tokenize(source: &str) -> Result<Vec<PosnToken>, SwindleError> {
         } else if c.is_ascii_alphabetic() {
             let mut varname = c.to_string();
             while let Some(c2) = chars.next() {
-                if c2.is_ascii_alphanumeric() {
+                if c2.is_ascii_alphanumeric() || c2 == '_' {
                     varname.push(c2);
                 } else {
                     chars.push(c2);

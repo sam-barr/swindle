@@ -1,15 +1,20 @@
 int n = 0;
+int num_thing = 17;
 
 while true {
-    if n == 4 {
-        n = n + 1;
-        continue;
-    } elif n == 8 {
-        break;
+    int i = 0;
+
+    while true {
+        if i > n {
+            break;
+        };
+        writeln i;
+        i = i + 1;
     };
 
-    writeln n;
+    if n > 5 {
+        break;
+    };
+    writeln "~~~~~~~~~~";
     n = n + 1;
 };
-
-writeln "done";
