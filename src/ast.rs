@@ -81,38 +81,7 @@ where
     T: Tag,
 {
     Assign(ID, Box<Expression<T, ID>>), // TODO: eventually have a LValue enum
-    IfExp(Box<IfExp<T, ID>>),
-    WhileExp(Box<WhileExp<T, ID>>),
     OrExp(Box<OrExp<T, ID>>),
-}
-
-#[derive(Debug)]
-pub struct WhileExp<T, ID>
-where
-    T: Tag,
-{
-    pub cond: Box<Expression<T, ID>>,
-    pub body: Body<T, ID>,
-}
-
-#[derive(Debug)]
-pub struct IfExp<T, ID>
-where
-    T: Tag,
-{
-    pub cond: Box<Expression<T, ID>>,
-    pub body: Body<T, ID>,
-    pub elifs: Vec<Elif<T, ID>>,
-    pub els: Body<T, ID>, // if its empty there's no else
-}
-
-#[derive(Debug)]
-pub struct Elif<T, ID>
-where
-    T: Tag,
-{
-    pub cond: Box<Expression<T, ID>>,
-    pub body: Body<T, ID>,
 }
 
 #[derive(Debug)]
@@ -204,7 +173,36 @@ where
     StringLit(String),
     BoolLit(bool),
     Variable(T::VariableTag, ID),
+    IfExp(Box<IfExp<T, ID>>),
+    WhileExp(Box<WhileExp<T, ID>>),
     Unit,
-    //Deref(Expression<Tag, ID>),
-    //Tuple(Vec<Expression<Tag, ID>>),
+}
+
+#[derive(Debug)]
+pub struct WhileExp<T, ID>
+where
+    T: Tag,
+{
+    pub cond: Box<Expression<T, ID>>,
+    pub body: Body<T, ID>,
+}
+
+#[derive(Debug)]
+pub struct IfExp<T, ID>
+where
+    T: Tag,
+{
+    pub cond: Box<Expression<T, ID>>,
+    pub body: Body<T, ID>,
+    pub elifs: Vec<Elif<T, ID>>,
+    pub els: Body<T, ID>, // if its empty there's no else
+}
+
+#[derive(Debug)]
+pub struct Elif<T, ID>
+where
+    T: Tag,
+{
+    pub cond: Box<Expression<T, ID>>,
+    pub body: Body<T, ID>,
 }

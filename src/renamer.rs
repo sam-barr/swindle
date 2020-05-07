@@ -99,10 +99,6 @@ fn rename_expression(
             name_table.get(&varname),
             rename_expression(name_table, *expression),
         ),
-        Expression::WhileExp(whileexp) => {
-            Expression::WhileExp(rename_whileexp(name_table, *whileexp))
-        }
-        Expression::IfExp(ifexp) => Expression::IfExp(rename_ifexp(name_table, *ifexp)),
         Expression::OrExp(orexp) => Expression::OrExp(rename_orexp(name_table, *orexp)),
     })
 }
@@ -231,5 +227,7 @@ fn rename_primary(
         Primary::BoolLit(b) => Primary::BoolLit(b),
         Primary::Variable(t, varname) => Primary::Variable(t, name_table.get(&varname)),
         Primary::Unit => Primary::Unit,
+        Primary::IfExp(ifexp) => Primary::IfExp(rename_ifexp(name_table, *ifexp)),
+        Primary::WhileExp(whileexp) => Primary::WhileExp(rename_whileexp(name_table, *whileexp)),
     })
 }

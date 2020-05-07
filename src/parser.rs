@@ -184,13 +184,6 @@ fn parse_expression(tokens: &[PosnToken]) -> ParserResult<Box<Expression<Parsed,
             _ => bad_token(tok),
         })
         .or_else(|_| {
-            parse_whileexp(tokens)
-                .map(|(whileexp, tokens)| (Box::new(Expression::WhileExp(whileexp)), tokens))
-        })
-        .or_else(|_| {
-            parse_ifexp(tokens).map(|(ifexp, tokens)| (Box::new(Expression::IfExp(ifexp)), tokens))
-        })
-        .or_else(|_| {
             parse_orexp(tokens).map(|(orexp, tokens)| (Box::new(Expression::OrExp(orexp)), tokens))
         })
 }
@@ -363,26 +356,31 @@ fn parse_unary(tokens: &[PosnToken]) -> ParserResult<Box<Unary<Parsed, String>>>
 
 fn parse_primary(tokens: &[PosnToken]) -> ParserResult<Primary<Parsed, String>> {
     //println!("primary {:?}", tokens);
-    item(tokens).and_then(|(tok, tokens)| {
-        macro_rules! mk {
-            ($result:expr) => {
-                Ok(($result, tokens))
-            };
-        }
+    item(tokens)
+        .and_then(|(tok, tokens)| {
+            macro_rules! mk {
+                ($result:expr) => {
+                    Ok(($result, tokens))
+                };
+            }
 
-        match &tok.token {
-            //Token::IntLit(n) => Some((Box<Primary::IntLit(*n)>, tokens)),
-            Token::IntLit(n) => mk!(Primary::IntLit(*n)),
-            Token::True => mk!(Primary::BoolLit(true)),
-            Token::False => mk!(Primary::BoolLit(false)),
-            Token::StringLit(s) => mk!(Primary::StringLit(s.to_string())),
-            Token::Variable(v) => mk!(Primary::Variable((), v.to_string())),
-            Token::LParen => parse_expression(tokens).and_then(|(expression, tokens)| {
-                token_lit(tokens, Token::RParen)
-                    .map(|(_, tokens)| (Primary::Paren(expression), tokens))
-            }),
-            Token::Unit => mk!(Primary::Unit),
-            _ => bad_token(tok),
-        }
-    })
+            match &tok.token {
+                //Token::IntLit(n) => Some((Box<Primary::IntLit(*n)>, tokens)),
+                Token::IntLit(n) => mk!(Primary::IntLit(*n)),
+                Token::True => mk!(Primary::BoolLit(true)),
+                Token::False => mk!(Primary::BoolLit(false)),
+                Token::StringLit(s) => mk!(Primary::StringLit(s.to_string())),
+                Token::Variable(v) => mk!(Primary::Variable((), v.to_string())),
+                Token::LParen => parse_expression(tokens).and_then(|(expression, tokens)| {
+                    token_lit(tokens, Token::RParen)
+                        .map(|(_, tokens)| (Primary::Paren(expression), tokens))
+                }),
+                Token::Unit => mk!(Primary::Unit),
+                _ => bad_token(tok),
+            }
+        })
+        .or_else(|_| parse_ifexp(tokens).map(|(ifexp, tokens)| (Primary::IfExp(ifexp), tokens)))
+        .or_else(|_| {
+            parse_whileexp(tokens).map(|(whileexp, tokens)| (Primary::WhileExp(whileexp), tokens))
+        })
 }

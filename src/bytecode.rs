@@ -153,8 +153,6 @@ fn byte_expression(
             bc.push(ByteCodeOp::UID(uid));
             bc
         }
-        Expression::WhileExp(whileexp) => byte_whileexp(state, *whileexp),
-        Expression::IfExp(ifexp) => byte_ifexp(state, *ifexp),
         Expression::OrExp(orexp) => byte_orexp(state, *orexp),
     }
 }
@@ -355,5 +353,7 @@ fn byte_primary(state: &mut CodeGenState, primary: Primary<Typed, UID>) -> Vec<B
         Primary::BoolLit(b) => vec![ByteCodeOp::BoolConst(b)],
         Primary::Variable(_, uid) => vec![ByteCodeOp::Variable, ByteCodeOp::UID(uid)],
         Primary::Unit => vec![ByteCodeOp::Unit],
+        Primary::IfExp(ifexp) => byte_ifexp(state, *ifexp),
+        Primary::WhileExp(whileexp) => byte_whileexp(state, *whileexp),
     }
 }

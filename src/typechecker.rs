@@ -150,17 +150,6 @@ fn type_expression(
             }),
             None => throw_error(format!("undeclared variable {}", varname), state.file_posn),
         },
-        Expression::WhileExp(whileexp) => {
-            let was_in_loop = state.in_loop;
-            state.in_loop = true;
-            let result = parse_whileexp(state, *whileexp)
-                .map(|(i, t)| (Box::new(Expression::WhileExp(i)), t));
-            state.in_loop = was_in_loop;
-            result
-        }
-        Expression::IfExp(ifexp) => {
-            parse_ifexp(state, *ifexp).map(|(i, t)| (Box::new(Expression::IfExp(i)), t))
-        }
         Expression::OrExp(orexp) => {
             type_orexp(state, *orexp).map(|(o, t)| (Box::new(Expression::OrExp(o)), t))
         }
@@ -451,5 +440,16 @@ fn type_primary(
             None => throw_error(format!("undeclared variable: {}", varname), state.file_posn),
         },
         Primary::Unit => Ok((Box::new(Primary::Unit), SwindleType::Unit)),
+        Primary::IfExp(ifexp) => {
+            parse_ifexp(state, *ifexp).map(|(i, t)| (Box::new(Primary::IfExp(i)), t))
+        }
+        Primary::WhileExp(whileexp) => {
+            let was_in_loop = state.in_loop;
+            state.in_loop = true;
+            let result =
+                parse_whileexp(state, *whileexp).map(|(i, t)| (Box::new(Primary::WhileExp(i)), t));
+            state.in_loop = was_in_loop;
+            result
+        }
     }
 }

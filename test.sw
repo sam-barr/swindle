@@ -15,6 +15,6 @@ while true {
     if n > 5 {
         break;
     };
-    writeln "~~~~~~~~~~";
+    writeln "";
     n = n + 1;
 };
