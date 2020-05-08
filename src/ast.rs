@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+use crate::error::*;
 use std::boxed::Box;
 use std::default::Default;
 
@@ -205,4 +206,13 @@ where
 {
     pub cond: Box<Expression<T, ID>>,
     pub body: Body<T, ID>,
+}
+
+#[derive(Debug)]
+pub struct Parsed {}
+
+impl Tag for Parsed {
+    type VariableTag = ();
+    type WriteTag = ();
+    type StatementTag = FilePosition;
 }

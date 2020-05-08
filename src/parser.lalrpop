@@ -1,0 +1,157 @@
+use std::str::FromStr;
+use swindle::ast::*;
+use swindle::error::*;
+
+grammar;
+
+pub Program: Program<Parsed, String> = {
+    ";"* <statements:TaggedStatement*> => Program { statements }
+}
+
+TaggedStatement: TaggedStatement<Parsed, String> = {
+    <tag:FP> <statement:SemiStatement> => TaggedStatement { tag, statement }
+}
+
+Statement: Statement<Parsed, String> = {
+    <t:Type> <v:Variable> "=" <e:Expression> => Statement::Declare(t, v, Box::new(e)),
+    "write" <e:Expression> => Statement::Write((), Box::new(e)),
+    "writeln" <e:Expression> => Statement::Writeln((), Box::new(e)),
+    "break" => Statement::Break,
+    "continue" => Statement::Continue,
+    <e:Expression> => Statement::Expression(Box::new(e)),
+}
+
+SemiStatement: Statement<Parsed, String> = {
+    <stmt:Statement> ";"+ => stmt
+}
+
+Type: Type = {
+    "int" => Type::Int,
+    "string" => Type::String,
+    "bool" => Type::Bool,
+    "unit" => Type::Unit,
+}
+
+Expression: Expression<Parsed, String> = {
+    <v:Variable> "=" <e:Expression> => Expression::Assign(v, Box::new(e)),
+    <o:OrExp> => Expression::OrExp(Box::new(o)),
+}
+
+OrExp: OrExp<Parsed, String> = {
+    <a:AndExp> "or" <o:OrExp> => OrExp::Or(Box::new(a), Box::new(o)),
+    <a:AndExp> => OrExp::AndExp(Box::new(a)),
+}
+
+AndExp: AndExp<Parsed, String> = {
+    <c:CompExp> "and" <a:AndExp> => AndExp::And(Box::new(c), Box::new(a)),
+    <c:CompExp> => AndExp::CompExp(Box::new(c)),
+}
+
+CompExp: CompExp<Parsed, String> = {
+    <a1:AddExp> <op:CompOp> <a2:AddExp> => CompExp::Comp(op, Box::new(a1), Box::new(a2)),
+    <a:AddExp> => CompExp::AddExp(Box::new(a)),
+}
+
+CompOp: CompOp = {
+    "<=" => CompOp::Leq,
+    "<" => CompOp::Lt,
+    "==" => CompOp::Eq,
+    "!=" => CompOp::Neq,
+    ">" => CompOp::Gt,
+    ">=" => CompOp::Geq,
+}
+
+AddExp: AddExp<Parsed, String> = {
+    <m:MulExp> <op:AddOp> <a:AddExp> => AddExp::Add(op, Box::new(m), Box::new(a)),
+    <m:MulExp> => AddExp::MulExp(Box::new(m)),
+}
+
+AddOp: AddOp = {
+    "+" => AddOp::Sum,
+    "-" => AddOp::Difference,
+}
+
+MulExp: MulExp<Parsed, String> = {
+    <u:Unary> <op:MulOp> <m:MulExp> => MulExp::Mul(op, Box::new(u), Box::new(m)),
+    <u:Unary> => MulExp::Unary(Box::new(u)),
+}
+
+MulOp: MulOp = {
+    "*" => MulOp::Product,
+    "/" => MulOp::Quotient,
+    "%" => MulOp::Remainder,
+}
+
+Unary: Unary<Parsed, String> = {
+    "-" <u:Unary> => Unary::Negate(Box::new(u)),
+    "not" <u:Unary> => Unary::Not(Box::new(u)),
+    "$" <ps:Primary*> => Unary::Stringify(ps),
+    <p:Primary> => Unary::Primary(Box::new(p)),
+}
+
+Primaries: Vec<Primary<Parsed, String>> = {
+    <ps:Primaries> <p:Primary> => { let mut ps = ps; ps.push(p); ps},
+    <p:Primary> => vec![p],
+}
+
+Primary: Primary<Parsed, String> = {
+    "(" <e:Expression> ")" => Primary::Paren(Box::new(e)),
+    <s:Str> => Primary::StringLit(s),
+    <n:Num> => Primary::IntLit(n),
+    <v:Variable> => Primary::Variable((), v),
+    "unit" => Primary::Unit,
+    "true" => Primary::BoolLit(true),
+    "false" => Primary::BoolLit(false),
+    "while" <cond:Expression> <body:Body> => {
+        Primary::WhileExp(Box::new(WhileExp { cond: Box::new(cond), body}))
+    },
+    "if" <cond:Expression> <body:Body> <elifs:Elif*> <els:Els?> => {
+        Primary::IfExp(Box::new(
+            IfExp {
+                cond: Box::new(cond),
+                body,
+                elifs,
+                els: match els {
+                    Some(els) => els,
+                    None => Body { statements: Vec::new() },
+                }
+            }
+        ))
+    }
+}
+
+Elif: Elif<Parsed, String> = {
+    "elif" <cond:Expression> <body:Body> => Elif { cond: Box::new(cond), body }
+}
+
+Els: Body<Parsed, String> = {
+    "else" <body:Body> => body,
+}
+
+Body: Body<Parsed, String> = {
+    "{" ";"* <statements:SemiStatement*> "}" => Body { statements }
+}
+
+FP: FilePosition = {
+    <l:@L> <r:@R> => FilePosition { line: l, column: r }
+}
+
+Str: String = <s:r#""(\\.|[^"\\])*""#> => {
+    let mut str = String::new();
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '"' => continue,
+            '\\' => match chars.next() {
+                Some('"') => str.push('"'),
+                Some('n') => str.push('\n'),
+                Some('t') => str.push('\t'),
+                _ => panic!(),
+            }
+            _ => str.push(c),
+        }
+    }
+    str
+};
+Num: i64 = <s:r"[0-9]+"> => i64::from_str(s).unwrap();
+Variable: String = <s:r"[a-zA-Z][_a-zA-Z]*"> => s.to_string();

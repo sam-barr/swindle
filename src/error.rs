@@ -3,8 +3,8 @@ use std::fmt;
 
 #[derive(Debug, Copy, Clone)]
 pub struct FilePosition {
-    pub line: u32,
-    pub column: u32,
+    pub line: usize,
+    pub column: usize,
 }
 
 impl FilePosition {

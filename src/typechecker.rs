@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 use crate::ast::*;
 use crate::error::*;
-use crate::parser::Parsed;
 use std::collections::HashMap;
 use std::default::Default;
 

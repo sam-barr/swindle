@@ -3,11 +3,17 @@ use std::collections::HashMap;
 use std::env;
 use std::fs::File;
 use std::io::Read;
+use std::process::exit;
 use swindle::bytecode::*;
-use swindle::parser::parse_program;
 use swindle::renamer::*;
-use swindle::tokenizer::*;
 use swindle::typechecker::*;
+//use swindle::tokenizer::*;
+//use swindle::parser::parse_program;
+
+#[macro_use]
+extern crate lalrpop_util;
+
+lalrpop_mod!(pub parser);
 
 fn main() {
     let code = {
@@ -18,9 +24,14 @@ fn main() {
         code
     };
 
-    let result = tokenize(&code)
-        .and_then(|tokens| parse_program(&tokens))
-        .and_then(type_program);
+    let parsed = parser::ProgramParser::new().parse(&code);
+    let result = match parsed {
+        Ok(p) => type_program(p),
+        Err(err) => {
+            println!("{:?}", err);
+            exit(1);
+        }
+    };
 
     match result {
         Ok(program) => {
