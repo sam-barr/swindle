@@ -13,7 +13,7 @@ use swindle::typechecker::*;
 #[macro_use]
 extern crate lalrpop_util;
 
-lalrpop_mod!(pub parser);
+lalrpop_mod!(#[allow(clippy::all)] pub parser);
 
 fn main() {
     let code = {
@@ -35,9 +35,13 @@ fn main() {
 
     match result {
         Ok(program) => {
-            let (program, _num_variables) = rename_program(program);
-            let (bytecode, strings) = byte_program(program);
-            let mut vm = VM::new(bytecode, strings);
+            let (program, num_variables) = rename_program(program);
+            let (bytecode, strings, num_labels, num_strings) = byte_program(program);
+            println!(
+                "variables: {}, labels: {}, strings: {}",
+                num_variables, num_labels, num_strings
+            );
+            let mut vm = VM::new(bytecode, strings, num_variables, num_labels, num_strings);
             let debug = false;
             vm.run(debug);
             if debug {
@@ -51,7 +55,7 @@ fn main() {
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 enum SwindleValue {
     Int(i64),
-    ConstString(UID),
+    ConstString(usize),
     HeapString(UID),
     Bool(bool),
     Unit,
@@ -156,27 +160,38 @@ impl Heap {
 struct VM {
     bytecode: Vec<ByteCodeOp>,
     idx: usize,
-    strings: HashMap<UID, String>,
-    variables: HashMap<UID, SwindleValue>,
+    strings: Vec<String>,
+    variables: Vec<SwindleValue>,
     stack: Vec<SwindleValue>,
-    labels: HashMap<UID, usize>,
+    labels: Vec<usize>,
     heap: Heap,
 }
 
 impl VM {
-    fn new(bytecode: Vec<ByteCodeOp>, strings: HashMap<UID, String>) -> Self {
-        let mut labels = HashMap::new();
+    fn new(
+        bytecode: Vec<ByteCodeOp>,
+        string_ids: HashMap<String, UID>,
+        num_variables: usize,
+        num_labels: usize,
+        num_strings: usize,
+    ) -> Self {
+        let mut labels = vec![Default::default(); num_labels];
         for (idx, op) in bytecode.iter().enumerate() {
             if let ByteCodeOp::Label(uid) = op {
-                labels.insert(*uid, idx);
+                labels[*uid] = idx;
             }
+        }
+
+        let mut strings = vec![Default::default(); num_strings];
+        for (string, uid) in string_ids.iter() {
+            strings[uid.get_value()] = string.to_string();
         }
 
         VM {
             bytecode,
             idx: 0,
             strings,
-            variables: HashMap::new(),
+            variables: vec![SwindleValue::Unit; num_variables],
             stack: Vec::new(),
             labels,
             heap: Heap::new(),
@@ -187,12 +202,12 @@ impl VM {
         println!("~~~~~~~~VM~~~~~~~~");
         if self.idx < self.bytecode.len() {
             print!("Current op: {:?}", self.bytecode[self.idx]);
-            match self.bytecode[self.idx] {
-                ByteCodeOp::StringConst
-                | ByteCodeOp::Variable
-                | ByteCodeOp::Assign
-                | ByteCodeOp::Declare
-                | ByteCodeOp::JumpIfFalse => println!("({:?})", self.bytecode[self.idx + 1]),
+            match self.bytecode.get(self.idx) {
+                Some(ByteCodeOp::StringConst)
+                | Some(ByteCodeOp::Variable)
+                | Some(ByteCodeOp::Assign)
+                | Some(ByteCodeOp::Declare)
+                | Some(ByteCodeOp::JumpIfFalse) => println!("({:?})", self.bytecode[self.idx + 1]),
                 _ => println!(),
             }
         }
@@ -202,9 +217,27 @@ impl VM {
         println!("~~~~~~~~~~~~~~~~~~");
     }
 
+    fn get_variable(&self, uid: usize) -> SwindleValue {
+        self.variables[uid]
+    }
+
+    fn set_variable(&mut self, uid: usize, value: SwindleValue) -> SwindleValue {
+        let old_value = self.variables[uid];
+        self.variables[uid] = value;
+        old_value
+    }
+
+    fn get_label(&self, uid: usize) -> usize {
+        self.labels[uid]
+    }
+
+    fn get_conststring(&self, uid: usize) -> &String {
+        &self.strings[uid]
+    }
+
     fn display(&self, value: SwindleValue) -> String {
         match value {
-            SwindleValue::ConstString(uid) => self.strings.get(&uid).unwrap().to_string(),
+            SwindleValue::ConstString(uid) => self.get_conststring(uid).to_string(),
             SwindleValue::HeapString(uid) => self.heap.get(uid).to_string(),
             SwindleValue::Unit => "()".to_string(),
             SwindleValue::Int(n) => n.to_string(),
@@ -233,14 +266,14 @@ impl VM {
     }
 
     fn run(&mut self, debug: bool) {
-        while self.idx < self.bytecode.len() {
+        while let Some(&bc_op) = self.bytecode.get(self.idx) {
             if debug {
                 self.debug();
                 let mut buffer = String::new();
                 std::io::stdin().read_line(&mut buffer).unwrap();
             }
 
-            match self.bytecode[self.idx] {
+            match bc_op {
                 ByteCodeOp::IntConst(n) => self.push(SwindleValue::Int(n)),
                 ByteCodeOp::StringConst => {
                     self.idx += 1;
@@ -252,7 +285,7 @@ impl VM {
                 ByteCodeOp::Variable => {
                     self.idx += 1;
                     if let ByteCodeOp::UID(uid) = self.bytecode[self.idx] {
-                        let value = *self.variables.get(&uid).unwrap();
+                        let value = self.get_variable(uid);
                         self.push(value);
                         self.access(value); // value in variable and on stack
                     }
@@ -313,7 +346,7 @@ impl VM {
                     let b = self.pop();
                     if let Some(s1) = match a {
                         SwindleValue::HeapString(uid) => Some(self.heap.get(uid)),
-                        SwindleValue::ConstString(uid) => Some(self.strings.get(&uid).unwrap()),
+                        SwindleValue::ConstString(uid) => Some(self.get_conststring(uid)),
                         _ => {
                             self.push(SwindleValue::Bool(a == b));
                             None
@@ -321,7 +354,7 @@ impl VM {
                     } {
                         let s2 = match b {
                             SwindleValue::HeapString(uid) => self.heap.get(uid),
-                            SwindleValue::ConstString(uid) => self.strings.get(&uid).unwrap(),
+                            SwindleValue::ConstString(uid) => self.get_conststring(uid),
                             _ => panic!(),
                         };
                         let eq = s1 == s2;
@@ -380,13 +413,13 @@ impl VM {
                     let v1 = self.pop();
                     let v2 = self.pop();
                     let mut s1 = match v1 {
-                        SwindleValue::ConstString(uid) => self.strings.get(&uid).unwrap(),
+                        SwindleValue::ConstString(uid) => self.get_conststring(uid),
                         SwindleValue::HeapString(uid) => self.heap.get(uid),
                         _ => panic!(),
                     }
                     .to_string();
                     let s2 = match v2 {
-                        SwindleValue::ConstString(uid) => self.strings.get(&uid).unwrap(),
+                        SwindleValue::ConstString(uid) => self.get_conststring(uid),
                         SwindleValue::HeapString(uid) => self.heap.get(uid),
                         _ => panic!(),
                     };
@@ -402,9 +435,8 @@ impl VM {
                     if let ByteCodeOp::UID(uid) = self.bytecode[self.idx] {
                         let value = self.pop();
 
-                        if let Some(old_value) = self.variables.insert(uid, value) {
-                            self.drop(old_value);
-                        }
+                        let old_value = self.set_variable(uid, value);
+                        self.drop(old_value);
                     }
                 }
                 ByteCodeOp::Assign => {
@@ -412,9 +444,8 @@ impl VM {
                     if let ByteCodeOp::UID(uid) = self.bytecode[self.idx] {
                         let value = self.pop();
 
-                        if let Some(old_value) = self.variables.insert(uid, value) {
-                            self.drop(old_value);
-                        }
+                        let old_value = self.set_variable(uid, value);
+                        self.drop(old_value);
                         self.push(value); // assignment returns the assigned value
                         self.access(value); // value is now in variable and on the stack
                     }
@@ -435,14 +466,14 @@ impl VM {
                     self.idx += 1;
                     if let ByteCodeOp::UID(uid) = self.bytecode[self.idx] {
                         if let SwindleValue::Bool(false) = self.pop() {
-                            self.idx = *self.labels.get(&uid).unwrap();
+                            self.idx = self.get_label(uid);
                         }
                     }
                 }
                 ByteCodeOp::Jump => {
                     self.idx += 1;
                     if let ByteCodeOp::UID(uid) = self.bytecode[self.idx] {
-                        self.idx = *self.labels.get(&uid).unwrap();
+                        self.idx = self.get_label(uid);
                     }
                 }
                 _ => panic!("wut"),

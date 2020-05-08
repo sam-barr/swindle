@@ -9,6 +9,7 @@ use std::default::Default;
 
 #[derive(Clone)]
 struct NameTable {
+    num_registers: usize,
     next_id: UID,
     table: HashMap<String, UID>,
 }
@@ -16,12 +17,14 @@ struct NameTable {
 impl NameTable {
     fn new() -> Self {
         NameTable {
+            num_registers: 0,
             next_id: Default::default(),
             table: HashMap::new(),
         }
     }
 
     fn insert(&mut self, name: String) -> UID {
+        self.num_registers += 1;
         self.table.insert(name, self.next_id);
         let id = self.next_id;
         self.next_id.inc();
@@ -34,7 +37,7 @@ impl NameTable {
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Ord, PartialOrd)]
-pub struct UID(u32);
+pub struct UID(usize);
 
 impl UID {
     pub fn new() -> Self {
@@ -44,6 +47,10 @@ impl UID {
     pub fn inc(&mut self) {
         self.0 += 1;
     }
+
+    pub fn get_value(&self) -> usize {
+        self.0
+    }
 }
 
 impl Default for UID {
@@ -52,7 +59,7 @@ impl Default for UID {
     }
 }
 
-pub fn rename_program(program: Program<Typed, String>) -> (Program<Typed, UID>, u32) {
+pub fn rename_program(program: Program<Typed, String>) -> (Program<Typed, UID>, usize) {
     let mut name_table = NameTable::new();
     let mut statements = Vec::new();
 
@@ -63,7 +70,7 @@ pub fn rename_program(program: Program<Typed, String>) -> (Program<Typed, UID>, 
         ));
     }
 
-    (Program { statements }, name_table.next_id.0)
+    (Program { statements }, name_table.num_registers)
 }
 
 fn rename_statement(
@@ -91,7 +98,7 @@ fn rename_statement(
 }
 
 fn rename_expression(
-    name_table: &NameTable,
+    name_table: &mut NameTable,
     expression: Expression<Typed, String>,
 ) -> Box<Expression<Typed, UID>> {
     Box::new(match expression {
@@ -104,7 +111,7 @@ fn rename_expression(
 }
 
 fn rename_whileexp(
-    name_table: &NameTable,
+    name_table: &mut NameTable,
     whileexp: WhileExp<Typed, String>,
 ) -> Box<WhileExp<Typed, UID>> {
     Box::new(WhileExp {
@@ -113,7 +120,7 @@ fn rename_whileexp(
     })
 }
 
-fn rename_ifexp(name_table: &NameTable, ifexp: IfExp<Typed, String>) -> Box<IfExp<Typed, UID>> {
+fn rename_ifexp(name_table: &mut NameTable, ifexp: IfExp<Typed, String>) -> Box<IfExp<Typed, UID>> {
     Box::new(IfExp {
         cond: rename_expression(name_table, *ifexp.cond),
         body: rename_body(name_table, ifexp.body),
@@ -128,24 +135,25 @@ fn rename_ifexp(name_table: &NameTable, ifexp: IfExp<Typed, String>) -> Box<IfEx
     })
 }
 
-fn rename_elif(name_table: &NameTable, elif: Elif<Typed, String>) -> Elif<Typed, UID> {
+fn rename_elif(name_table: &mut NameTable, elif: Elif<Typed, String>) -> Elif<Typed, UID> {
     Elif {
         cond: rename_expression(name_table, *elif.cond),
         body: rename_body(name_table, elif.body),
     }
 }
 
-fn rename_body(name_table: &NameTable, body: Body<Typed, String>) -> Body<Typed, UID> {
-    let mut name_table = name_table.clone();
+fn rename_body(name_table: &mut NameTable, body: Body<Typed, String>) -> Body<Typed, UID> {
+    let mut name_table_clone = name_table.clone();
     let mut statements = Vec::new();
     for stmt in body.statements {
-        statements.push(rename_statement(&mut name_table, stmt));
+        statements.push(rename_statement(&mut name_table_clone, stmt));
     }
+    name_table.num_registers = name_table_clone.num_registers;
 
     Body { statements }
 }
 
-fn rename_orexp(name_table: &NameTable, orexp: OrExp<Typed, String>) -> Box<OrExp<Typed, UID>> {
+fn rename_orexp(name_table: &mut NameTable, orexp: OrExp<Typed, String>) -> Box<OrExp<Typed, UID>> {
     Box::new(match orexp {
         OrExp::Or(andexp, orexp) => OrExp::Or(
             rename_andexp(name_table, *andexp),
@@ -155,7 +163,10 @@ fn rename_orexp(name_table: &NameTable, orexp: OrExp<Typed, String>) -> Box<OrEx
     })
 }
 
-fn rename_andexp(name_table: &NameTable, andexp: AndExp<Typed, String>) -> Box<AndExp<Typed, UID>> {
+fn rename_andexp(
+    name_table: &mut NameTable,
+    andexp: AndExp<Typed, String>,
+) -> Box<AndExp<Typed, UID>> {
     Box::new(match andexp {
         AndExp::And(compexp, andexp) => AndExp::And(
             rename_compexp(name_table, *compexp),
@@ -166,7 +177,7 @@ fn rename_andexp(name_table: &NameTable, andexp: AndExp<Typed, String>) -> Box<A
 }
 
 fn rename_compexp(
-    name_table: &NameTable,
+    name_table: &mut NameTable,
     compexp: CompExp<Typed, String>,
 ) -> Box<CompExp<Typed, UID>> {
     Box::new(match compexp {
@@ -179,7 +190,10 @@ fn rename_compexp(
     })
 }
 
-fn rename_addexp(name_table: &NameTable, addexp: AddExp<Typed, String>) -> Box<AddExp<Typed, UID>> {
+fn rename_addexp(
+    name_table: &mut NameTable,
+    addexp: AddExp<Typed, String>,
+) -> Box<AddExp<Typed, UID>> {
     Box::new(match addexp {
         AddExp::Add(addop, mulexp, addexp) => AddExp::Add(
             addop,
@@ -190,7 +204,10 @@ fn rename_addexp(name_table: &NameTable, addexp: AddExp<Typed, String>) -> Box<A
     })
 }
 
-fn rename_mulexp(name_table: &NameTable, mulexp: MulExp<Typed, String>) -> Box<MulExp<Typed, UID>> {
+fn rename_mulexp(
+    name_table: &mut NameTable,
+    mulexp: MulExp<Typed, String>,
+) -> Box<MulExp<Typed, UID>> {
     Box::new(match mulexp {
         MulExp::Mul(mulop, unary, mulexp) => MulExp::Mul(
             mulop,
@@ -201,7 +218,7 @@ fn rename_mulexp(name_table: &NameTable, mulexp: MulExp<Typed, String>) -> Box<M
     })
 }
 
-fn rename_unary(name_table: &NameTable, unary: Unary<Typed, String>) -> Box<Unary<Typed, UID>> {
+fn rename_unary(name_table: &mut NameTable, unary: Unary<Typed, String>) -> Box<Unary<Typed, UID>> {
     Box::new(match unary {
         Unary::Negate(unary) => Unary::Negate(rename_unary(name_table, *unary)),
         Unary::Not(unary) => Unary::Not(rename_unary(name_table, *unary)),
@@ -217,7 +234,7 @@ fn rename_unary(name_table: &NameTable, unary: Unary<Typed, String>) -> Box<Unar
 }
 
 fn rename_primary(
-    name_table: &NameTable,
+    name_table: &mut NameTable,
     primary: Primary<Typed, String>,
 ) -> Box<Primary<Typed, UID>> {
     Box::new(match primary {
