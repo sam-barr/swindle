@@ -7,8 +7,6 @@ use std::process::exit;
 use swindle::bytecode::*;
 use swindle::renamer::*;
 use swindle::typechecker::*;
-//use swindle::tokenizer::*;
-//use swindle::parser::parse_program;
 
 #[macro_use]
 extern crate lalrpop_util;
