@@ -3,7 +3,8 @@ use std::env;
 use std::fs::File;
 use std::io::Read;
 use std::process::exit;
-//use swindle::renamer::*;
+use swindle::llvm::*;
+use swindle::precodegen::*;
 use swindle::typechecker::*;
 
 #[macro_use]
@@ -31,7 +32,10 @@ fn main() {
 
     match result {
         Ok(program) => {
-            println!("{:?}", program);
+            let (program, variables) = preprocess_program(program);
+            unsafe {
+                cg_program(program, variables);
+            }
             //let (_program, num_variables) = rename_program(program);
             //println!("{:?}", num_variables);
         }

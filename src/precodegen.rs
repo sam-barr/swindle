@@ -3,7 +3,8 @@ use crate::ast::*;
 use crate::typechecker::*;
 use std::collections::HashMap;
 
-struct PCG {}
+#[derive(Debug)]
+pub struct PCG {}
 
 impl Tag for PCG {
     type WriteTag = SwindleType;
@@ -54,7 +55,7 @@ impl PCGState {
     }
 }
 
-fn preprocess_program(program: Program<Typed>) -> Program<PCG> {
+pub fn preprocess_program(program: Program<Typed>) -> (Program<PCG>, Vec<SwindleType>) {
     let mut state = PCGState::new();
     let mut statements = Vec::new();
     for tagged_stmt in program.statements {
@@ -63,7 +64,7 @@ fn preprocess_program(program: Program<Typed>) -> Program<PCG> {
             statement: preprocess_statement(&mut state, tagged_stmt.statement),
         })
     }
-    Program { statements }
+    (Program { statements }, state.variables)
 }
 
 fn preprocess_statement(state: &mut PCGState, statement: Statement<Typed>) -> Statement<PCG> {

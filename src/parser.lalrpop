@@ -153,5 +153,5 @@ Str: String = <s:r#""(\\.|[^"\\])*""#> => {
     }
     str
 };
-Num: i64 = <s:r"[0-9]+"> => i64::from_str(s).unwrap();
+Num: u64 = <s:r"[0-9]+"> => u64::from_str(s).unwrap();
 Variable: String = <s:r"[a-zA-Z][_a-zA-Z]*"> => s.to_string();
