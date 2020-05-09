@@ -35,10 +35,6 @@ fn main() {
         Ok(program) => {
             let (program, num_variables) = rename_program(program);
             let (bytecode, strings, num_labels, num_strings) = byte_program(program);
-            println!(
-                "variables: {}, labels: {}, strings: {}",
-                num_variables, num_labels, num_strings
-            );
             let mut vm = VM::new(bytecode, strings, num_variables, num_labels, num_strings);
             let debug = false;
             vm.run(debug);
@@ -200,14 +196,6 @@ impl VM {
         println!("~~~~~~~~VM~~~~~~~~");
         if self.idx < self.bytecode.len() {
             print!("Current op: {:?}", self.bytecode[self.idx]);
-            match self.bytecode.get(self.idx) {
-                Some(ByteCodeOp::StringConst)
-                | Some(ByteCodeOp::Variable)
-                | Some(ByteCodeOp::Assign)
-                | Some(ByteCodeOp::Declare)
-                | Some(ByteCodeOp::JumpIfFalse) => println!("({:?})", self.bytecode[self.idx + 1]),
-                _ => println!(),
-            }
         }
         println!("Variables: {:?}", self.variables);
         println!("Stack: {:?}", self.stack);
@@ -273,20 +261,12 @@ impl VM {
 
             match bc_op {
                 ByteCodeOp::IntConst(n) => self.push(SwindleValue::Int(n)),
-                ByteCodeOp::StringConst => {
-                    self.idx += 1;
-                    if let ByteCodeOp::UID(uid) = self.bytecode[self.idx] {
-                        self.push(SwindleValue::ConstString(uid));
-                    }
-                }
+                ByteCodeOp::StringConst(uid) => self.push(SwindleValue::ConstString(uid)),
                 ByteCodeOp::BoolConst(b) => self.push(SwindleValue::Bool(b)),
-                ByteCodeOp::Variable => {
-                    self.idx += 1;
-                    if let ByteCodeOp::UID(uid) = self.bytecode[self.idx] {
-                        let value = self.get_variable(uid);
-                        self.push(value);
-                        self.access(value); // value in variable and on stack
-                    }
+                ByteCodeOp::Variable(uid) => {
+                    let value = self.get_variable(uid);
+                    self.push(value);
+                    self.access(value); // value in variable and on stack
                 }
                 ByteCodeOp::Unit => self.push(SwindleValue::Unit),
                 ByteCodeOp::Pop => {
@@ -428,25 +408,19 @@ impl VM {
                     self.push(SwindleValue::HeapString(uid));
                 }
 
-                ByteCodeOp::Declare => {
-                    self.idx += 1;
-                    if let ByteCodeOp::UID(uid) = self.bytecode[self.idx] {
-                        let value = self.pop();
+                ByteCodeOp::Declare(uid) => {
+                    let value = self.pop();
 
-                        let old_value = self.set_variable(uid, value);
-                        self.drop(old_value);
-                    }
+                    let old_value = self.set_variable(uid, value);
+                    self.drop(old_value);
                 }
-                ByteCodeOp::Assign => {
-                    self.idx += 1;
-                    if let ByteCodeOp::UID(uid) = self.bytecode[self.idx] {
-                        let value = self.pop();
+                ByteCodeOp::Assign(uid) => {
+                    let value = self.pop();
 
-                        let old_value = self.set_variable(uid, value);
-                        self.drop(old_value);
-                        self.push(value); // assignment returns the assigned value
-                        self.access(value); // value is now in variable and on the stack
-                    }
+                    let old_value = self.set_variable(uid, value);
+                    self.drop(old_value);
+                    self.push(value); // assignment returns the assigned value
+                    self.access(value); // value is now in variable and on the stack
                 }
                 ByteCodeOp::Write => {
                     let v = self.pop();
@@ -460,21 +434,12 @@ impl VM {
                 }
 
                 ByteCodeOp::Label(_) => {}
-                ByteCodeOp::JumpIfFalse => {
-                    self.idx += 1;
-                    if let ByteCodeOp::UID(uid) = self.bytecode[self.idx] {
-                        if let SwindleValue::Bool(false) = self.pop() {
-                            self.idx = self.get_label(uid);
-                        }
-                    }
-                }
-                ByteCodeOp::Jump => {
-                    self.idx += 1;
-                    if let ByteCodeOp::UID(uid) = self.bytecode[self.idx] {
+                ByteCodeOp::JumpIfFalse(uid) => {
+                    if let SwindleValue::Bool(false) = self.pop() {
                         self.idx = self.get_label(uid);
                     }
                 }
-                _ => panic!("wut"),
+                ByteCodeOp::Jump(uid) => self.idx = self.get_label(uid),
             }
 
             self.idx += 1;

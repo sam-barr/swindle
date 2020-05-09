@@ -9,13 +9,12 @@ use std::collections::HashMap;
 #[derive(Debug, Copy, Clone)]
 pub enum ByteCodeOp {
     // Primary
-    UID(usize),      // this is an argument to other operatios
-    IntConst(i64),   // push
-    StringConst,     // args: UID
-    BoolConst(bool), // push
-    Variable,        // args: UID
-    Unit,            // push
-    Pop,             // pop
+    IntConst(i64),      // push
+    StringConst(usize), // args: UID
+    BoolConst(bool),    // push
+    Variable(usize),    // args: UID
+    Unit,               // push
+    Pop,                // pop
 
     // Unary
     Negate, // pop, push
@@ -44,14 +43,14 @@ pub enum ByteCodeOp {
     Stringify, // pop, push
     Append,    // 2pop, push
 
-    Assign,  // arg: UID, pop, push
-    Declare, // arg: UID, pop, push
-    Write,   // pop, push
-    Writeln, // pop, push
+    Assign(usize),  // arg: UID, pop, push
+    Declare(usize), // arg: UID, pop, push
+    Write,          // pop, push
+    Writeln,        // pop, push
 
-    Label(usize), // basically a NOP
-    JumpIfFalse,  // arg: UID, pop
-    Jump,         // pop
+    Label(usize),       // basically a NOP
+    JumpIfFalse(usize), // arg: UID, pop
+    Jump(usize),        // pop
 }
 
 struct CodeGenState {
@@ -118,8 +117,7 @@ fn byte_statement(state: &mut CodeGenState, statement: Statement<Typed, UID>) ->
         Statement::Declare(_, uid, expression) => {
             let mut bc = Vec::new();
             bc.append(&mut byte_expression(state, *expression));
-            bc.push(ByteCodeOp::Declare);
-            bc.push(ByteCodeOp::UID(uid.get_value()));
+            bc.push(ByteCodeOp::Declare(uid.get_value()));
             bc.push(ByteCodeOp::Unit); // All the non-expression statements return unit
             bc
         }
@@ -137,14 +135,8 @@ fn byte_statement(state: &mut CodeGenState, statement: Statement<Typed, UID>) ->
             bc.push(ByteCodeOp::Unit);
             bc
         }
-        Statement::Break => vec![
-            ByteCodeOp::Jump,
-            ByteCodeOp::UID(state.break_label.get_value()),
-        ],
-        Statement::Continue => vec![
-            ByteCodeOp::Jump,
-            ByteCodeOp::UID(state.continue_label.get_value()),
-        ],
+        Statement::Break => vec![ByteCodeOp::Jump(state.break_label.get_value())],
+        Statement::Continue => vec![ByteCodeOp::Jump(state.continue_label.get_value())],
         Statement::Expression(expression) => byte_expression(state, *expression),
     }
 }
@@ -157,8 +149,7 @@ fn byte_expression(
         Expression::Assign(uid, expression) => {
             let mut bc = Vec::new();
             bc.append(&mut byte_expression(state, *expression));
-            bc.push(ByteCodeOp::Assign);
-            bc.push(ByteCodeOp::UID(uid.get_value()));
+            bc.push(ByteCodeOp::Assign(uid.get_value()));
             bc
         }
         Expression::OrExp(orexp) => byte_orexp(state, *orexp),
@@ -176,12 +167,10 @@ fn byte_whileexp(state: &mut CodeGenState, whileexp: WhileExp<Typed, UID>) -> Ve
     let mut bc = Vec::new();
     bc.push(ByteCodeOp::Label(start_label.get_value()));
     bc.append(&mut byte_expression(state, *whileexp.cond));
-    bc.push(ByteCodeOp::JumpIfFalse);
-    bc.push(ByteCodeOp::UID(end_label.get_value()));
+    bc.push(ByteCodeOp::JumpIfFalse(end_label.get_value()));
     bc.append(&mut byte_body(state, whileexp.body));
     bc.push(ByteCodeOp::Pop);
-    bc.push(ByteCodeOp::Jump);
-    bc.push(ByteCodeOp::UID(start_label.get_value()));
+    bc.push(ByteCodeOp::Jump(start_label.get_value()));
     bc.push(ByteCodeOp::Label(end_label.get_value()));
     bc.push(ByteCodeOp::Unit);
 
@@ -197,11 +186,9 @@ fn byte_ifexp(state: &mut CodeGenState, ifexp: IfExp<Typed, UID>) -> Vec<ByteCod
 
     let mut bc = Vec::new();
     bc.append(&mut byte_expression(state, *ifexp.cond));
-    bc.push(ByteCodeOp::JumpIfFalse);
-    bc.push(ByteCodeOp::UID(label.get_value()));
+    bc.push(ByteCodeOp::JumpIfFalse(label.get_value()));
     bc.append(&mut byte_body(state, ifexp.body));
-    bc.push(ByteCodeOp::Jump);
-    bc.push(ByteCodeOp::UID(end_label.get_value()));
+    bc.push(ByteCodeOp::Jump(end_label.get_value()));
     bc.push(ByteCodeOp::Label(label.get_value()));
 
     for elif in ifexp.elifs {
@@ -218,11 +205,9 @@ fn byte_elif(end_label: UID, state: &mut CodeGenState, elif: Elif<Typed, UID>) -
     let label = state.get_label();
     let mut bc = Vec::new();
     bc.append(&mut byte_expression(state, *elif.cond));
-    bc.push(ByteCodeOp::JumpIfFalse);
-    bc.push(ByteCodeOp::UID(label.get_value()));
+    bc.push(ByteCodeOp::JumpIfFalse(label.get_value()));
     bc.append(&mut byte_body(state, elif.body));
-    bc.push(ByteCodeOp::Jump);
-    bc.push(ByteCodeOp::UID(end_label.get_value()));
+    bc.push(ByteCodeOp::Jump(end_label.get_value()));
     bc.push(ByteCodeOp::Label(label.get_value()));
 
     bc
@@ -357,12 +342,9 @@ fn byte_primary(state: &mut CodeGenState, primary: Primary<Typed, UID>) -> Vec<B
     match primary {
         Primary::Paren(expression) => byte_expression(state, *expression),
         Primary::IntLit(n) => vec![ByteCodeOp::IntConst(n)],
-        Primary::StringLit(s) => vec![
-            ByteCodeOp::StringConst,
-            ByteCodeOp::UID(state.lookup_string(s).get_value()),
-        ],
+        Primary::StringLit(s) => vec![ByteCodeOp::StringConst(state.lookup_string(s).get_value())],
         Primary::BoolLit(b) => vec![ByteCodeOp::BoolConst(b)],
-        Primary::Variable(_, uid) => vec![ByteCodeOp::Variable, ByteCodeOp::UID(uid.get_value())],
+        Primary::Variable(_, uid) => vec![ByteCodeOp::Variable(uid.get_value())],
         Primary::Unit => vec![ByteCodeOp::Unit],
         Primary::IfExp(ifexp) => byte_ifexp(state, *ifexp),
         Primary::WhileExp(whileexp) => byte_whileexp(state, *whileexp),
