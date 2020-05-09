@@ -1,7 +1,6 @@
 pub mod ast;
-pub mod bytecode;
 pub mod error;
 pub mod llvm;
-pub mod renamer;
+//pub mod renamer;
+pub mod precodegen;
 pub mod typechecker;
-pub mod vm;

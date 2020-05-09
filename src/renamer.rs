@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 use crate::ast::*;
-use crate::typechecker::Typed;
+use crate::typechecker::{SwindleType, Typed};
 use std::boxed::Box;
 use std::collections::HashMap;
 use std::default::Default;

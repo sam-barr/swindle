@@ -3,10 +3,8 @@ use std::env;
 use std::fs::File;
 use std::io::Read;
 use std::process::exit;
-use swindle::bytecode::*;
-use swindle::renamer::*;
+//use swindle::renamer::*;
 use swindle::typechecker::*;
-use swindle::vm::*;
 
 #[macro_use]
 extern crate lalrpop_util;
@@ -33,17 +31,9 @@ fn main() {
 
     match result {
         Ok(program) => {
-            let (program, num_variables) = rename_program(program);
-            let (bytecode, strings, num_labels, num_strings) = byte_program(program);
-            //unsafe {
-            //    build_llvm(&bytecode, &[], num_variables);
-            //}
-            for i in 0..bytecode.len() {
-                println!("{:?}", bytecode[i]);
-            }
-            let mut vm = VM::new(bytecode, strings, num_variables, num_labels, num_strings);
-            vm.run(false);
-            vm.debug();
+            println!("{:?}", program);
+            //let (_program, num_variables) = rename_program(program);
+            //println!("{:?}", num_variables);
         }
         Err(e) => println!("{}", e),
     }
