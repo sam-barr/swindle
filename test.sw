@@ -1,20 +1,7 @@
 int n = 0;
-int num_thing = 17;
 
 while true {
-    int i = 0;
-
-    while true {
-        if i > n {
-            break;
-        };
-        writeln i;
-        i = i + 1;
-    };
-
-    if n > 5 {
-        break;
-    };
-    writeln "";
-    n = n + 1;
+    writeln $ unit if true { if true { break; }; 7; } else { 6; } unit;
 };
+
+writeln "done";
