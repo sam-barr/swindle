@@ -4,24 +4,24 @@ use swindle::error::*;
 
 grammar;
 
-pub Program: Program<Parsed, String> = {
+pub Program: Program<Parsed> = {
     ";"* <statements:TaggedStatement*> => Program { statements }
 }
 
-TaggedStatement: TaggedStatement<Parsed, String> = {
+TaggedStatement: TaggedStatement<Parsed> = {
     <tag:FP> <statement:SemiStatement> => TaggedStatement { tag, statement }
 }
 
-Statement: Statement<Parsed, String> = {
+Statement: Statement<Parsed> = {
     <t:Type> <v:Variable> "=" <e:Expression> => Statement::Declare(t, v, Box::new(e)),
-    "write" <e:Expression> => Statement::Write((), Box::new(e)),
-    "writeln" <e:Expression> => Statement::Writeln((), Box::new(e)),
+    "write" <e:Expression> => Statement::Write((), false, Box::new(e)),
+    "writeln" <e:Expression> => Statement::Write((), true, Box::new(e)),
     "break" => Statement::Break,
     "continue" => Statement::Continue,
     <e:Expression> => Statement::Expression(Box::new(e)),
 }
 
-SemiStatement: Statement<Parsed, String> = {
+SemiStatement: Statement<Parsed> = {
     <stmt:Statement> ";"+ => stmt
 }
 
@@ -32,22 +32,22 @@ Type: Type = {
     "unit" => Type::Unit,
 }
 
-Expression: Expression<Parsed, String> = {
+Expression: Expression<Parsed> = {
     <v:Variable> "=" <e:Expression> => Expression::Assign(v, Box::new(e)),
     <o:OrExp> => Expression::OrExp(Box::new(o)),
 }
 
-OrExp: OrExp<Parsed, String> = {
+OrExp: OrExp<Parsed> = {
     <a:AndExp> "or" <o:OrExp> => OrExp::Or(Box::new(a), Box::new(o)),
     <a:AndExp> => OrExp::AndExp(Box::new(a)),
 }
 
-AndExp: AndExp<Parsed, String> = {
+AndExp: AndExp<Parsed> = {
     <c:CompExp> "and" <a:AndExp> => AndExp::And(Box::new(c), Box::new(a)),
     <c:CompExp> => AndExp::CompExp(Box::new(c)),
 }
 
-CompExp: CompExp<Parsed, String> = {
+CompExp: CompExp<Parsed> = {
     <a1:AddExp> <op:CompOp> <a2:AddExp> => CompExp::Comp(op, Box::new(a1), Box::new(a2)),
     <a:AddExp> => CompExp::AddExp(Box::new(a)),
 }
@@ -61,7 +61,7 @@ CompOp: CompOp = {
     ">=" => CompOp::Geq,
 }
 
-AddExp: AddExp<Parsed, String> = {
+AddExp: AddExp<Parsed> = {
     <m:MulExp> <op:AddOp> <a:AddExp> => AddExp::Add(op, Box::new(m), Box::new(a)),
     <m:MulExp> => AddExp::MulExp(Box::new(m)),
 }
@@ -71,7 +71,7 @@ AddOp: AddOp = {
     "-" => AddOp::Difference,
 }
 
-MulExp: MulExp<Parsed, String> = {
+MulExp: MulExp<Parsed> = {
     <u:Unary> <op:MulOp> <m:MulExp> => MulExp::Mul(op, Box::new(u), Box::new(m)),
     <u:Unary> => MulExp::Unary(Box::new(u)),
 }
@@ -82,32 +82,33 @@ MulOp: MulOp = {
     "%" => MulOp::Remainder,
 }
 
-Unary: Unary<Parsed, String> = {
+Unary: Unary<Parsed> = {
     "-" <u:Unary> => Unary::Negate(Box::new(u)),
     "not" <u:Unary> => Unary::Not(Box::new(u)),
     "$" <ps:Primary*> => Unary::Stringify(ps),
     <p:Primary> => Unary::Primary(Box::new(p)),
 }
 
-Primaries: Vec<Primary<Parsed, String>> = {
+Primaries: Vec<Primary<Parsed>> = {
     <ps:Primaries> <p:Primary> => { let mut ps = ps; ps.push(p); ps},
     <p:Primary> => vec![p],
 }
 
-Primary: Primary<Parsed, String> = {
+Primary: Primary<Parsed> = {
     "(" <e:Expression> ")" => Primary::Paren(Box::new(e)),
     <s:Str> => Primary::StringLit(s),
     <n:Num> => Primary::IntLit(n),
-    <v:Variable> => Primary::Variable((), v),
+    <v:Variable> => Primary::Variable(v),
     "unit" => Primary::Unit,
     "true" => Primary::BoolLit(true),
     "false" => Primary::BoolLit(false),
     "while" <cond:Expression> <body:Body> => {
-        Primary::WhileExp(Box::new(WhileExp { cond: Box::new(cond), body}))
+        Primary::WhileExp(WhileExp { cond: Box::new(cond), body})
     },
     "if" <cond:Expression> <body:Body> <elifs:Elif*> <els:Els?> => {
-        Primary::IfExp(Box::new(
+        Primary::IfExp(
             IfExp {
+                tag: (),
                 cond: Box::new(cond),
                 body,
                 elifs,
@@ -116,19 +117,19 @@ Primary: Primary<Parsed, String> = {
                     None => Body { statements: Vec::new() },
                 }
             }
-        ))
+        )
     }
 }
 
-Elif: Elif<Parsed, String> = {
+Elif: Elif<Parsed> = {
     "elif" <cond:Expression> <body:Body> => Elif { cond: Box::new(cond), body }
 }
 
-Els: Body<Parsed, String> = {
+Els: Body<Parsed> = {
     "else" <body:Body> => body,
 }
 
-Body: Body<Parsed, String> = {
+Body: Body<Parsed> = {
     "{" ";"* <statements:SemiStatement*> "}" => Body { statements }
 }
 
@@ -153,5 +154,5 @@ Str: String = <s:r#""(\\.|[^"\\])*""#> => {
     }
     str
 };
-Num: i64 = <s:r"[0-9]+"> => i64::from_str(s).unwrap();
+Num: u64 = <s:r"[0-9]+"> => u64::from_str(s).unwrap();
 Variable: String = <s:r"[a-zA-Z][_a-zA-Z]*"> => s.to_string();

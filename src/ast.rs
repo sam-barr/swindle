@@ -4,48 +4,49 @@ use std::boxed::Box;
 use std::default::Default;
 
 pub trait Tag {
-    type VariableTag: core::fmt::Debug;
-    type WriteTag: core::fmt::Debug;
+    type TypeTag: core::fmt::Debug;
     type StatementTag: core::fmt::Debug;
+    type DeclareTag: core::fmt::Debug;
+    type VariableID: core::fmt::Debug;
+    type StringID: core::fmt::Debug;
 }
 
 #[derive(Debug)]
-pub struct Program<T, ID>
+pub struct Program<T>
 where
     T: Tag,
 {
-    pub statements: Vec<TaggedStatement<T, ID>>,
+    pub statements: Vec<TaggedStatement<T>>,
 }
 
 #[derive(Debug)]
-pub struct TaggedStatement<T, ID>
+pub struct TaggedStatement<T>
 where
     T: Tag,
 {
     pub tag: T::StatementTag,
-    pub statement: Statement<T, ID>,
+    pub statement: Statement<T>,
 }
 
-impl<T, ID> TaggedStatement<T, ID>
+impl<T> TaggedStatement<T>
 where
     T: Tag,
 {
-    pub fn new(tag: T::StatementTag, statement: Statement<T, ID>) -> Self {
+    pub fn new(tag: T::StatementTag, statement: Statement<T>) -> Self {
         TaggedStatement { tag, statement }
     }
 }
 
 #[derive(Debug)]
-pub enum Statement<T, ID>
+pub enum Statement<T>
 where
     T: Tag,
 {
-    Declare(Type, ID, Box<Expression<T, ID>>),
-    Write(T::WriteTag, Box<Expression<T, ID>>),
-    Writeln(T::WriteTag, Box<Expression<T, ID>>),
+    Declare(T::DeclareTag, T::VariableID, Box<Expression<T>>),
+    Write(T::TypeTag, bool, Box<Expression<T>>),
     Break,
     Continue,
-    Expression(Box<Expression<T, ID>>),
+    Expression(Box<Expression<T>>),
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -58,14 +59,14 @@ pub enum Type {
 
 // make this a tagged statement?
 #[derive(Debug)]
-pub struct Body<T, ID>
+pub struct Body<T>
 where
     T: Tag,
 {
-    pub statements: Vec<Statement<T, ID>>,
+    pub statements: Vec<Statement<T>>,
 }
 
-impl<T, ID> Default for Body<T, ID>
+impl<T> Default for Body<T>
 where
     T: Tag,
 {
@@ -77,39 +78,39 @@ where
 }
 
 #[derive(Debug)]
-pub enum Expression<T, ID>
+pub enum Expression<T>
 where
     T: Tag,
 {
-    Assign(ID, Box<Expression<T, ID>>), // TODO: eventually have a LValue enum
-    OrExp(Box<OrExp<T, ID>>),
+    Assign(T::VariableID, Box<Expression<T>>), // TODO: eventually have a LValue enum
+    OrExp(Box<OrExp<T>>),
 }
 
 #[derive(Debug)]
-pub enum OrExp<T, ID>
+pub enum OrExp<T>
 where
     T: Tag,
 {
-    Or(Box<AndExp<T, ID>>, Box<OrExp<T, ID>>),
-    AndExp(Box<AndExp<T, ID>>),
+    Or(Box<AndExp<T>>, Box<OrExp<T>>),
+    AndExp(Box<AndExp<T>>),
 }
 
 #[derive(Debug)]
-pub enum AndExp<T, ID>
+pub enum AndExp<T>
 where
     T: Tag,
 {
-    And(Box<CompExp<T, ID>>, Box<AndExp<T, ID>>),
-    CompExp(Box<CompExp<T, ID>>),
+    And(Box<CompExp<T>>, Box<AndExp<T>>),
+    CompExp(Box<CompExp<T>>),
 }
 
 #[derive(Debug)]
-pub enum CompExp<T, ID>
+pub enum CompExp<T>
 where
     T: Tag,
 {
-    Comp(CompOp, Box<AddExp<T, ID>>, Box<AddExp<T, ID>>),
-    AddExp(Box<AddExp<T, ID>>),
+    Comp(CompOp, Box<AddExp<T>>, Box<AddExp<T>>),
+    AddExp(Box<AddExp<T>>),
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -123,12 +124,12 @@ pub enum CompOp {
 }
 
 #[derive(Debug)]
-pub enum AddExp<T, ID>
+pub enum AddExp<T>
 where
     T: Tag,
 {
-    Add(AddOp, Box<MulExp<T, ID>>, Box<AddExp<T, ID>>),
-    MulExp(Box<MulExp<T, ID>>),
+    Add(AddOp, Box<MulExp<T>>, Box<AddExp<T>>),
+    MulExp(Box<MulExp<T>>),
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -138,12 +139,12 @@ pub enum AddOp {
 }
 
 #[derive(Debug)]
-pub enum MulExp<T, ID>
+pub enum MulExp<T>
 where
     T: Tag,
 {
-    Mul(MulOp, Box<Unary<T, ID>>, Box<MulExp<T, ID>>),
-    Unary(Box<Unary<T, ID>>),
+    Mul(MulOp, Box<Unary<T>>, Box<MulExp<T>>),
+    Unary(Box<Unary<T>>),
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -154,65 +155,68 @@ pub enum MulOp {
 }
 
 #[derive(Debug)]
-pub enum Unary<T, ID>
+pub enum Unary<T>
 where
     T: Tag,
 {
-    Negate(Box<Unary<T, ID>>),
-    Not(Box<Unary<T, ID>>),
-    Stringify(Vec<Primary<T, ID>>),
-    Primary(Box<Primary<T, ID>>),
+    Negate(Box<Unary<T>>),
+    Not(Box<Unary<T>>),
+    Stringify(Vec<Primary<T>>),
+    Primary(Box<Primary<T>>),
 }
 
 #[derive(Debug)]
-pub enum Primary<T, ID>
+pub enum Primary<T>
 where
     T: Tag,
 {
-    Paren(Box<Expression<T, ID>>),
-    IntLit(i64), // I only parse positive integer btw
-    StringLit(String),
+    Paren(Box<Expression<T>>),
+    IntLit(u64), // I only parse positive integer btw
+    StringLit(T::StringID),
     BoolLit(bool),
-    Variable(T::VariableTag, ID),
-    IfExp(Box<IfExp<T, ID>>),
-    WhileExp(Box<WhileExp<T, ID>>),
+    Variable(T::VariableID),
+    IfExp(IfExp<T>),
+    WhileExp(WhileExp<T>),
     Unit,
 }
 
 #[derive(Debug)]
-pub struct WhileExp<T, ID>
+pub struct WhileExp<T>
 where
     T: Tag,
 {
-    pub cond: Box<Expression<T, ID>>,
-    pub body: Body<T, ID>,
+    pub cond: Box<Expression<T>>,
+    pub body: Body<T>,
 }
 
 #[derive(Debug)]
-pub struct IfExp<T, ID>
+pub struct IfExp<T>
 where
     T: Tag,
 {
-    pub cond: Box<Expression<T, ID>>,
-    pub body: Body<T, ID>,
-    pub elifs: Vec<Elif<T, ID>>,
-    pub els: Body<T, ID>, // if its empty there's no else
+    pub tag: T::TypeTag,
+    pub cond: Box<Expression<T>>,
+    pub body: Body<T>,
+    pub elifs: Vec<Elif<T>>,
+    pub els: Body<T>, // if its empty there's no else
 }
 
 #[derive(Debug)]
-pub struct Elif<T, ID>
+pub struct Elif<T>
 where
     T: Tag,
 {
-    pub cond: Box<Expression<T, ID>>,
-    pub body: Body<T, ID>,
+    pub cond: Box<Expression<T>>,
+    pub body: Body<T>,
 }
 
 #[derive(Debug)]
 pub struct Parsed {}
 
 impl Tag for Parsed {
-    type VariableTag = ();
-    type WriteTag = ();
+    type TypeTag = ();
     type StatementTag = FilePosition;
+    type DeclareTag = Type;
+    type VariableID = String;
+    type StringID = String;
 }

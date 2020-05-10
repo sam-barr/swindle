@@ -8,9 +8,11 @@ use std::default::Default;
 pub struct Typed {}
 
 impl Tag for Typed {
-    type VariableTag = SwindleType;
-    type WriteTag = SwindleType;
+    type TypeTag = SwindleType;
     type StatementTag = ();
+    type DeclareTag = SwindleType;
+    type VariableID = String;
+    type StringID = String;
 }
 
 // copy and clone might not work in the future
@@ -58,7 +60,7 @@ fn throw_error<A>(message: String, file_posn: FilePosition) -> TyperResult<A> {
     })
 }
 
-pub fn type_program(program: Program<Parsed, String>) -> TyperResult<Program<Typed, String>> {
+pub fn type_program(program: Program<Parsed>) -> TyperResult<Program<Typed>> {
     let mut state = TyperState::new();
     let mut statements = Vec::new();
     for tagged_stmt in program.statements {
@@ -74,8 +76,8 @@ pub fn type_program(program: Program<Parsed, String>) -> TyperResult<Program<Typ
 
 fn type_statement(
     state: &mut TyperState,
-    statement: Statement<Parsed, String>,
-) -> TyperResult<(Statement<Typed, String>, SwindleType)> {
+    statement: Statement<Parsed>,
+) -> TyperResult<(Statement<Typed>, SwindleType)> {
     match statement {
         Statement::Declare(typ, varname, expression) => {
             if state.get(&varname).is_some() {
@@ -87,17 +89,15 @@ fn type_statement(
                 type_expression(state, *expression).and_then(|(e, t)| {
                     if type_matches_swindle_type(typ, t) {
                         state.insert(varname.to_string(), t);
-                        Ok((Statement::Declare(typ, varname, e), SwindleType::Unit))
+                        Ok((Statement::Declare(t, varname, e), SwindleType::Unit))
                     } else {
                         throw_error("bad types for declare".to_string(), state.file_posn)
                     }
                 })
             }
         }
-        Statement::Write((), expression) => type_expression(state, *expression)
-            .map(|(e, t)| (Statement::Write(t, e), SwindleType::Unit)),
-        Statement::Writeln((), expression) => type_expression(state, *expression)
-            .map(|(e, t)| (Statement::Writeln(t, e), SwindleType::Unit)),
+        Statement::Write((), newline, expression) => type_expression(state, *expression)
+            .map(|(e, t)| (Statement::Write(t, newline, e), SwindleType::Unit)),
         Statement::Break => {
             if state.in_loop {
                 Ok((Statement::Break, SwindleType::Unit))
@@ -136,8 +136,8 @@ fn type_matches_swindle_type(typ: Type, swindle: SwindleType) -> bool {
 
 fn type_expression(
     state: &mut TyperState,
-    expression: Expression<Parsed, String>,
-) -> TyperResult<(Box<Expression<Typed, String>>, SwindleType)> {
+    expression: Expression<Parsed>,
+) -> TyperResult<(Box<Expression<Typed>>, SwindleType)> {
     match expression {
         Expression::Assign(varname, expression) => match state.get(&varname) {
             Some(tv) => type_expression(state, *expression).and_then(|(e, te)| {
@@ -155,10 +155,10 @@ fn type_expression(
     }
 }
 
-fn parse_whileexp(
+fn type_whileexp(
     state: &mut TyperState,
-    whileexp: WhileExp<Parsed, String>,
-) -> TyperResult<(Box<WhileExp<Typed, String>>, SwindleType)> {
+    whileexp: WhileExp<Parsed>,
+) -> TyperResult<(WhileExp<Typed>, SwindleType)> {
     let cond = match type_expression(state, *whileexp.cond) {
         Ok((cond, SwindleType::Bool)) => cond,
         Err(e) => return Err(e),
@@ -175,13 +175,13 @@ fn parse_whileexp(
         Err(e) => return Err(e),
     };
 
-    Ok((Box::new(WhileExp { cond, body }), SwindleType::Unit))
+    Ok((WhileExp { cond, body }, SwindleType::Unit))
 }
 
-fn parse_ifexp(
+fn type_ifexp(
     state: &mut TyperState,
-    ifexp: IfExp<Parsed, String>,
-) -> TyperResult<(Box<IfExp<Typed, String>>, SwindleType)> {
+    ifexp: IfExp<Parsed>,
+) -> TyperResult<(IfExp<Typed>, SwindleType)> {
     let cond = match type_expression(state, *ifexp.cond) {
         Ok((cond, SwindleType::Bool)) => cond,
         Err(e) => return Err(e),
@@ -219,20 +219,21 @@ fn parse_ifexp(
     };
 
     Ok((
-        Box::new(IfExp {
+        IfExp {
+            tag: iftype,
             cond,
             body,
             elifs,
             els,
-        }),
+        },
         iftype,
     ))
 }
 
 fn type_elif(
     state: &mut TyperState,
-    elif: Elif<Parsed, String>,
-) -> TyperResult<(Elif<Typed, String>, SwindleType)> {
+    elif: Elif<Parsed>,
+) -> TyperResult<(Elif<Typed>, SwindleType)> {
     let cond = match type_expression(state, *elif.cond) {
         Ok((cond, SwindleType::Bool)) => cond,
         Err(e) => return Err(e),
@@ -249,8 +250,8 @@ fn type_elif(
 
 fn type_body(
     state: &mut TyperState,
-    body: Body<Parsed, String>,
-) -> TyperResult<(Body<Typed, String>, SwindleType)> {
+    body: Body<Parsed>,
+) -> TyperResult<(Body<Typed>, SwindleType)> {
     let mut state = state.clone();
     let mut body_type = SwindleType::Unit;
     let mut statements = Vec::new();
@@ -277,8 +278,8 @@ fn type_body(
 
 fn type_orexp(
     state: &mut TyperState,
-    orexp: OrExp<Parsed, String>,
-) -> TyperResult<(Box<OrExp<Typed, String>>, SwindleType)> {
+    orexp: OrExp<Parsed>,
+) -> TyperResult<(Box<OrExp<Typed>>, SwindleType)> {
     match orexp {
         OrExp::Or(andexp, orexp) => type_andexp(state, *andexp).and_then(|(a, ta)| {
             type_orexp(state, *orexp).and_then(|(o, to)| match (ta, to) {
@@ -296,8 +297,8 @@ fn type_orexp(
 
 fn type_andexp(
     state: &mut TyperState,
-    andexp: AndExp<Parsed, String>,
-) -> TyperResult<(Box<AndExp<Typed, String>>, SwindleType)> {
+    andexp: AndExp<Parsed>,
+) -> TyperResult<(Box<AndExp<Typed>>, SwindleType)> {
     match andexp {
         AndExp::And(compexp, andexp) => type_compexp(state, *compexp).and_then(|(c, tc)| {
             type_andexp(state, *andexp).and_then(|(a, ta)| match (tc, ta) {
@@ -315,8 +316,8 @@ fn type_andexp(
 
 fn type_compexp(
     state: &mut TyperState,
-    compexp: CompExp<Parsed, String>,
-) -> TyperResult<(Box<CompExp<Typed, String>>, SwindleType)> {
+    compexp: CompExp<Parsed>,
+) -> TyperResult<(Box<CompExp<Typed>>, SwindleType)> {
     match compexp {
         CompExp::Comp(compop, addexp1, addexp2) => {
             type_addexp(state, *addexp1).and_then(|(a1, t1)| {
@@ -352,8 +353,8 @@ fn type_compexp(
 
 fn type_addexp(
     state: &mut TyperState,
-    addexp: AddExp<Parsed, String>,
-) -> TyperResult<(Box<AddExp<Typed, String>>, SwindleType)> {
+    addexp: AddExp<Parsed>,
+) -> TyperResult<(Box<AddExp<Typed>>, SwindleType)> {
     match addexp {
         AddExp::Add(addop, mulexp, addexp) => type_mulexp(state, *mulexp).and_then(|(m, tm)| {
             type_addexp(state, *addexp).and_then(|(a, ta)| match (tm, ta) {
@@ -371,8 +372,8 @@ fn type_addexp(
 
 fn type_mulexp(
     state: &mut TyperState,
-    mulexp: MulExp<Parsed, String>,
-) -> TyperResult<(Box<MulExp<Typed, String>>, SwindleType)> {
+    mulexp: MulExp<Parsed>,
+) -> TyperResult<(Box<MulExp<Typed>>, SwindleType)> {
     match mulexp {
         MulExp::Mul(mulop, unary, mulexp) => type_unary(state, *unary).and_then(|(u, tu)| {
             type_mulexp(state, *mulexp).and_then(|(m, tm)| match (tu, tm) {
@@ -390,8 +391,8 @@ fn type_mulexp(
 
 fn type_unary(
     state: &mut TyperState,
-    unary: Unary<Parsed, String>,
-) -> TyperResult<(Box<Unary<Typed, String>>, SwindleType)> {
+    unary: Unary<Parsed>,
+) -> TyperResult<(Box<Unary<Typed>>, SwindleType)> {
     match unary {
         Unary::Negate(unary) => type_unary(state, *unary).and_then(|(u, t)| match t {
             SwindleType::Int => Ok((Box::new(Unary::Negate(u)), t)),
@@ -425,8 +426,8 @@ fn type_unary(
 
 fn type_primary(
     state: &mut TyperState,
-    primary: Primary<Parsed, String>,
-) -> TyperResult<(Box<Primary<Typed, String>>, SwindleType)> {
+    primary: Primary<Parsed>,
+) -> TyperResult<(Box<Primary<Typed>>, SwindleType)> {
     match primary {
         Primary::Paren(expression) => {
             type_expression(state, *expression).map(|(e, t)| (Box::new(Primary::Paren(e)), t))
@@ -434,19 +435,19 @@ fn type_primary(
         Primary::IntLit(n) => Ok((Box::new(Primary::IntLit(n)), SwindleType::Int)),
         Primary::StringLit(s) => Ok((Box::new(Primary::StringLit(s)), SwindleType::String)),
         Primary::BoolLit(b) => Ok((Box::new(Primary::BoolLit(b)), SwindleType::Bool)),
-        Primary::Variable((), varname) => match state.get(&varname) {
-            Some(typ) => Ok((Box::new(Primary::Variable(typ, varname)), typ)),
+        Primary::Variable(varname) => match state.get(&varname) {
+            Some(typ) => Ok((Box::new(Primary::Variable(varname)), typ)),
             None => throw_error(format!("undeclared variable: {}", varname), state.file_posn),
         },
         Primary::Unit => Ok((Box::new(Primary::Unit), SwindleType::Unit)),
         Primary::IfExp(ifexp) => {
-            parse_ifexp(state, *ifexp).map(|(i, t)| (Box::new(Primary::IfExp(i)), t))
+            type_ifexp(state, ifexp).map(|(i, t)| (Box::new(Primary::IfExp(i)), t))
         }
         Primary::WhileExp(whileexp) => {
             let was_in_loop = state.in_loop;
             state.in_loop = true;
             let result =
-                parse_whileexp(state, *whileexp).map(|(i, t)| (Box::new(Primary::WhileExp(i)), t));
+                type_whileexp(state, whileexp).map(|(i, t)| (Box::new(Primary::WhileExp(i)), t));
             state.in_loop = was_in_loop;
             result
         }
