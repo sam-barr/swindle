@@ -8,7 +8,7 @@ use std::default::Default;
 pub struct Typed {}
 
 impl Tag for Typed {
-    type WriteTag = SwindleType;
+    type TypeTag = SwindleType;
     type StatementTag = ();
     type DeclareTag = SwindleType;
     type VariableID = String;
@@ -96,10 +96,8 @@ fn type_statement(
                 })
             }
         }
-        Statement::Write((), expression) => type_expression(state, *expression)
-            .map(|(e, t)| (Statement::Write(t, e), SwindleType::Unit)),
-        Statement::Writeln((), expression) => type_expression(state, *expression)
-            .map(|(e, t)| (Statement::Writeln(t, e), SwindleType::Unit)),
+        Statement::Write((), newline, expression) => type_expression(state, *expression)
+            .map(|(e, t)| (Statement::Write(t, newline, e), SwindleType::Unit)),
         Statement::Break => {
             if state.in_loop {
                 Ok((Statement::Break, SwindleType::Unit))
@@ -157,10 +155,10 @@ fn type_expression(
     }
 }
 
-fn parse_whileexp(
+fn type_whileexp(
     state: &mut TyperState,
     whileexp: WhileExp<Parsed>,
-) -> TyperResult<(Box<WhileExp<Typed>>, SwindleType)> {
+) -> TyperResult<(WhileExp<Typed>, SwindleType)> {
     let cond = match type_expression(state, *whileexp.cond) {
         Ok((cond, SwindleType::Bool)) => cond,
         Err(e) => return Err(e),
@@ -177,13 +175,13 @@ fn parse_whileexp(
         Err(e) => return Err(e),
     };
 
-    Ok((Box::new(WhileExp { cond, body }), SwindleType::Unit))
+    Ok((WhileExp { cond, body }, SwindleType::Unit))
 }
 
-fn parse_ifexp(
+fn type_ifexp(
     state: &mut TyperState,
     ifexp: IfExp<Parsed>,
-) -> TyperResult<(Box<IfExp<Typed>>, SwindleType)> {
+) -> TyperResult<(IfExp<Typed>, SwindleType)> {
     let cond = match type_expression(state, *ifexp.cond) {
         Ok((cond, SwindleType::Bool)) => cond,
         Err(e) => return Err(e),
@@ -221,12 +219,13 @@ fn parse_ifexp(
     };
 
     Ok((
-        Box::new(IfExp {
+        IfExp {
+            tag: iftype,
             cond,
             body,
             elifs,
             els,
-        }),
+        },
         iftype,
     ))
 }
@@ -442,13 +441,13 @@ fn type_primary(
         },
         Primary::Unit => Ok((Box::new(Primary::Unit), SwindleType::Unit)),
         Primary::IfExp(ifexp) => {
-            parse_ifexp(state, *ifexp).map(|(i, t)| (Box::new(Primary::IfExp(i)), t))
+            type_ifexp(state, ifexp).map(|(i, t)| (Box::new(Primary::IfExp(i)), t))
         }
         Primary::WhileExp(whileexp) => {
             let was_in_loop = state.in_loop;
             state.in_loop = true;
             let result =
-                parse_whileexp(state, *whileexp).map(|(i, t)| (Box::new(Primary::WhileExp(i)), t));
+                type_whileexp(state, whileexp).map(|(i, t)| (Box::new(Primary::WhileExp(i)), t));
             state.in_loop = was_in_loop;
             result
         }

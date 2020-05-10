@@ -4,7 +4,7 @@ use std::boxed::Box;
 use std::default::Default;
 
 pub trait Tag {
-    type WriteTag: core::fmt::Debug;
+    type TypeTag: core::fmt::Debug;
     type StatementTag: core::fmt::Debug;
     type DeclareTag: core::fmt::Debug;
     type VariableID: core::fmt::Debug;
@@ -43,8 +43,7 @@ where
     T: Tag,
 {
     Declare(T::DeclareTag, T::VariableID, Box<Expression<T>>),
-    Write(T::WriteTag, Box<Expression<T>>),
-    Writeln(T::WriteTag, Box<Expression<T>>),
+    Write(T::TypeTag, bool, Box<Expression<T>>),
     Break,
     Continue,
     Expression(Box<Expression<T>>),
@@ -176,8 +175,8 @@ where
     StringLit(T::StringID),
     BoolLit(bool),
     Variable(T::VariableID),
-    IfExp(Box<IfExp<T>>),
-    WhileExp(Box<WhileExp<T>>),
+    IfExp(IfExp<T>),
+    WhileExp(WhileExp<T>),
     Unit,
 }
 
@@ -195,6 +194,7 @@ pub struct IfExp<T>
 where
     T: Tag,
 {
+    pub tag: T::TypeTag,
     pub cond: Box<Expression<T>>,
     pub body: Body<T>,
     pub elifs: Vec<Elif<T>>,
@@ -214,7 +214,7 @@ where
 pub struct Parsed {}
 
 impl Tag for Parsed {
-    type WriteTag = ();
+    type TypeTag = ();
     type StatementTag = FilePosition;
     type DeclareTag = Type;
     type VariableID = String;

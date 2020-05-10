@@ -14,8 +14,8 @@ TaggedStatement: TaggedStatement<Parsed> = {
 
 Statement: Statement<Parsed> = {
     <t:Type> <v:Variable> "=" <e:Expression> => Statement::Declare(t, v, Box::new(e)),
-    "write" <e:Expression> => Statement::Write((), Box::new(e)),
-    "writeln" <e:Expression> => Statement::Writeln((), Box::new(e)),
+    "write" <e:Expression> => Statement::Write((), false, Box::new(e)),
+    "writeln" <e:Expression> => Statement::Write((), true, Box::new(e)),
     "break" => Statement::Break,
     "continue" => Statement::Continue,
     <e:Expression> => Statement::Expression(Box::new(e)),
@@ -103,11 +103,12 @@ Primary: Primary<Parsed> = {
     "true" => Primary::BoolLit(true),
     "false" => Primary::BoolLit(false),
     "while" <cond:Expression> <body:Body> => {
-        Primary::WhileExp(Box::new(WhileExp { cond: Box::new(cond), body}))
+        Primary::WhileExp(WhileExp { cond: Box::new(cond), body})
     },
     "if" <cond:Expression> <body:Body> <elifs:Elif*> <els:Els?> => {
-        Primary::IfExp(Box::new(
+        Primary::IfExp(
             IfExp {
+                tag: (),
                 cond: Box::new(cond),
                 body,
                 elifs,
@@ -116,7 +117,7 @@ Primary: Primary<Parsed> = {
                     None => Body { statements: Vec::new() },
                 }
             }
-        ))
+        )
     }
 }
 

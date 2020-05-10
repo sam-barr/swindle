@@ -83,11 +83,8 @@ fn rename_statement(
             let new_name = name_table.insert(varname);
             Statement::Declare(typ, new_name, expression)
         }
-        Statement::Write(tag, expression) => {
-            Statement::Write(tag, rename_expression(name_table, *expression))
-        }
-        Statement::Writeln(tag, expression) => {
-            Statement::Writeln(tag, rename_expression(name_table, *expression))
+        Statement::Write(tag, newline, expression) => {
+            Statement::Write(tag, newline, rename_expression(name_table, *expression))
         }
         Statement::Break => Statement::Break,
         Statement::Continue => Statement::Continue,

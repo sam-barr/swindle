@@ -33,11 +33,7 @@ fn main() {
     match result {
         Ok(program) => {
             let (program, variables, strings) = preprocess_program(program);
-            unsafe {
-                cg_program(program, variables, strings);
-            }
-            //let (_program, num_variables) = rename_program(program);
-            //println!("{:?}", num_variables);
+            cg_program(program, variables, strings);
         }
         Err(e) => println!("{}", e),
     }

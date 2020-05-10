@@ -7,7 +7,7 @@ use std::collections::HashMap;
 pub struct PCG {}
 
 impl Tag for PCG {
-    type WriteTag = SwindleType;
+    type TypeTag = SwindleType;
     type StatementTag = ();
     type DeclareTag = ();
     type VariableID = usize;
@@ -76,11 +76,8 @@ fn preprocess_statement(state: &mut PCGState, statement: Statement<Typed>) -> St
             state.add_variable(varname, typ),
             preprocess_expression(state, *expression),
         ),
-        Statement::Write(typ, expression) => {
-            Statement::Write(typ, preprocess_expression(state, *expression))
-        }
-        Statement::Writeln(typ, expression) => {
-            Statement::Writeln(typ, preprocess_expression(state, *expression))
+        Statement::Write(typ, newline, expression) => {
+            Statement::Write(typ, newline, preprocess_expression(state, *expression))
         }
         Statement::Break => Statement::Break,
         Statement::Continue => Statement::Break,
@@ -172,8 +169,42 @@ fn preprocess_primary(state: &mut PCGState, primary: Primary<Typed>) -> Primary<
         Primary::StringLit(s) => Primary::StringLit(state.add_string(s)),
         Primary::BoolLit(b) => Primary::BoolLit(b),
         Primary::Variable(v) => Primary::Variable(state.get_variable(v)),
-        Primary::IfExp(_) => unimplemented!(),
+        Primary::IfExp(ifexp) => Primary::IfExp(preprocess_ifexp(state, ifexp)),
         Primary::WhileExp(_) => unimplemented!(),
         Primary::Unit => Primary::Unit,
     }
+}
+
+fn preprocess_ifexp(state: &mut PCGState, ifexp: IfExp<Typed>) -> IfExp<PCG> {
+    let tag = ifexp.tag;
+    let cond = preprocess_expression(state, *ifexp.cond);
+    let body = preprocess_body(state, ifexp.body);
+    let mut elifs = Vec::new();
+    for elif in ifexp.elifs {
+        elifs.push(preprocess_elif(state, elif));
+    }
+    let els = preprocess_body(state, ifexp.els);
+    IfExp {
+        tag,
+        cond,
+        body,
+        elifs,
+        els,
+    }
+}
+
+fn preprocess_elif(state: &mut PCGState, elif: Elif<Typed>) -> Elif<PCG> {
+    Elif {
+        cond: preprocess_expression(state, *elif.cond),
+        body: preprocess_body(state, elif.body),
+    }
+}
+
+fn preprocess_body(state: &mut PCGState, body: Body<Typed>) -> Body<PCG> {
+    let mut statements = Vec::new();
+    for stmt in body.statements {
+        statements.push(preprocess_statement(state, stmt));
+    }
+
+    Body { statements }
 }
