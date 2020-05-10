@@ -55,7 +55,9 @@ impl PCGState {
     }
 }
 
-pub fn preprocess_program(program: Program<Typed>) -> (Program<PCG>, Vec<SwindleType>) {
+pub fn preprocess_program(
+    program: Program<Typed>,
+) -> (Program<PCG>, Vec<SwindleType>, Vec<String>) {
     let mut state = PCGState::new();
     let mut statements = Vec::new();
     for tagged_stmt in program.statements {
@@ -64,7 +66,7 @@ pub fn preprocess_program(program: Program<Typed>) -> (Program<PCG>, Vec<Swindle
             statement: preprocess_statement(&mut state, tagged_stmt.statement),
         })
     }
-    (Program { statements }, state.variables)
+    (Program { statements }, state.variables, state.strings)
 }
 
 fn preprocess_statement(state: &mut PCGState, statement: Statement<Typed>) -> Statement<PCG> {

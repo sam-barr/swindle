@@ -21,6 +21,14 @@ struct Builder {
     builder: LLVMBuilderRef,
     module: LLVMModuleRef,
     variables: Vec<LLVMValueRef>,
+    strings: Vec<LLVMValueRef>,
+    fmt_int: LLVMValueRef,
+    fmt_string: LLVMValueRef,
+    fmt_true: LLVMValueRef,
+    fmt_false: LLVMValueRef,
+    fmt_unit: LLVMValueRef,
+    fmt_newline: LLVMValueRef,
+    printf: LLVMValueRef,
 }
 
 impl Builder {
@@ -30,6 +38,7 @@ impl Builder {
             let builder = LLVMCreateBuilderInContext(context);
             let module = LLVMModuleCreateWithNameInContext(nm!(b"main\0"), context);
             let variables = Vec::new();
+            let strings = Vec::new();
 
             // NOTE: not sure if this is good
             let void = LLVMVoidTypeInContext(context);
@@ -37,12 +46,36 @@ impl Builder {
             let function = LLVMAddFunction(module, nm!(b"main\0"), function_type);
             let bb = LLVMAppendBasicBlockInContext(context, function, nm!(b"entry\0"));
             LLVMPositionBuilderAtEnd(builder, bb);
+            // NOTE end not good
+
+            let fmt_int = LLVMBuildGlobalStringPtr(builder, nm!(b"%d\0"), nm!(b"fmt_int\0"));
+            let fmt_string = LLVMBuildGlobalStringPtr(builder, nm!(b"%s\0"), nm!(b"fmt_string\0"));
+            let fmt_true = LLVMBuildGlobalStringPtr(builder, nm!(b"true\0"), nm!(b"fmt_true\0"));
+            let fmt_false = LLVMBuildGlobalStringPtr(builder, nm!(b"false\0"), nm!(b"fmt_false\0"));
+            let fmt_unit = LLVMBuildGlobalStringPtr(builder, nm!(b"()\0"), nm!(b"fmt_unit\0"));
+            let fmt_newline =
+                LLVMBuildGlobalStringPtr(builder, nm!(b"\n\0"), nm!(b"fmt_newline\0"));
+            let printf_ty = LLVMFunctionType(
+                LLVMInt64TypeInContext(context),
+                [LLVMPointerType(LLVMInt8TypeInContext(context), 0)].as_mut_ptr(),
+                1,
+                LLVM_TRUE,
+            );
+            let printf = LLVMAddFunction(module, nm!(b"printf\0"), printf_ty);
 
             Builder {
                 context,
                 builder,
                 module,
                 variables,
+                strings,
+                fmt_int,
+                fmt_string,
+                fmt_true,
+                fmt_false,
+                fmt_unit,
+                fmt_newline,
+                printf,
             }
         }
     }
@@ -52,7 +85,7 @@ impl Builder {
             SwindleType::Int => self.int64(),
             SwindleType::Bool => self.int1(),
             SwindleType::Unit => self.int1(),
-            SwindleType::String => unimplemented!(),
+            SwindleType::String => LLVMPointerType(self.int8(), 0),
         };
         self.variables
             .push(LLVMBuildAlloca(self.builder, typ, nm!(b"var\0")));
@@ -65,6 +98,14 @@ impl Builder {
     unsafe fn int1(&self) -> LLVMTypeRef {
         LLVMInt1TypeInContext(self.context)
     }
+
+    unsafe fn int8(&self) -> LLVMTypeRef {
+        LLVMInt8TypeInContext(self.context)
+    }
+
+    unsafe fn unit(&self) -> LLVMValueRef {
+        LLVMConstInt(self.int1(), 0, LLVM_FALSE)
+    }
 }
 
 impl Drop for Builder {
@@ -73,23 +114,30 @@ impl Drop for Builder {
             LLVMDisposeBuilder(self.builder);
             LLVMDisposeModule(self.module);
             LLVMContextDispose(self.context);
-            drop(self.builder);
-            drop(self.module);
-            drop(self.context);
         }
     }
 }
 
-pub unsafe fn cg_program(program: Program<PCG>, var_info: Vec<SwindleType>) {
+pub unsafe fn cg_program(program: Program<PCG>, var_info: Vec<SwindleType>, strings: Vec<String>) {
     let mut builder = Builder::new();
     for typ in var_info {
         builder.declare_variable(typ);
+    }
+
+    for mut string in strings {
+        string.push('\0');
+        builder.strings.push(LLVMBuildGlobalStringPtr(
+            builder.builder,
+            string.as_ptr() as *const _,
+            nm!(b"str\0"),
+        ));
     }
 
     for tagged_stmt in program.statements {
         cg_statement(&mut builder, tagged_stmt.statement);
     }
 
+    LLVMBuildRetVoid(builder.builder);
     LLVMDumpModule(builder.module);
 }
 
@@ -100,7 +148,30 @@ unsafe fn cg_statement(builder: &Builder, statement: Statement<PCG>) -> LLVMValu
             cg_expression(builder, *expression),
             builder.variables[id],
         ),
-        Statement::Write(_, _) => unimplemented!(),
+        Statement::Write(ty, expression) => match ty {
+            SwindleType::Int => LLVMBuildCall(
+                builder.builder,
+                builder.printf,
+                [builder.fmt_int, cg_expression(builder, *expression)].as_mut_ptr(),
+                2,
+                nm!(b"write\0"),
+            ),
+            SwindleType::Bool => unimplemented!(),
+            SwindleType::String => LLVMBuildCall(
+                builder.builder,
+                builder.printf,
+                [builder.fmt_string, cg_expression(builder, *expression)].as_mut_ptr(),
+                2,
+                nm!(b"write\0"),
+            ),
+            SwindleType::Unit => LLVMBuildCall(
+                builder.builder,
+                builder.printf,
+                [builder.fmt_unit, cg_expression(builder, *expression)].as_mut_ptr(),
+                1,
+                nm!(b"write\0"),
+            ),
+        },
         Statement::Writeln(_, _) => unimplemented!(),
         Statement::Break => unimplemented!(),
         Statement::Continue => unimplemented!(),
@@ -213,43 +284,15 @@ unsafe fn cg_unary(builder: &Builder, unary: Unary<PCG>) -> LLVMValueRef {
 
 unsafe fn cg_primary(builder: &Builder, primary: Primary<PCG>) -> LLVMValueRef {
     match primary {
-        Primary::Paren(_) => unimplemented!(),
+        Primary::Paren(e) => cg_expression(builder, *e),
         Primary::IntLit(n) => LLVMConstInt(builder.int64(), n, LLVM_TRUE),
-        Primary::StringLit(_) => unimplemented!(),
+        Primary::StringLit(id) => builder.strings[id],
         Primary::BoolLit(b) => LLVMConstInt(builder.int1(), if b { 1 } else { 0 }, LLVM_FALSE),
         Primary::Variable(id) => {
             LLVMBuildLoad(builder.builder, builder.variables[id], nm!(b"variable\0"))
         }
         Primary::IfExp(_) => unimplemented!(),
         Primary::WhileExp(_) => unimplemented!(),
-        Primary::Unit => LLVMConstInt(builder.int1(), 0, LLVM_FALSE),
+        Primary::Unit => builder.unit(),
     }
 }
-
-//pub unsafe fn build_llvm(_strings: &[String], num_variables: usize) {
-//    let builder = Builder::new();
-//
-//    let int64 = LLVMInt64TypeInContext(builder.context);
-//    let void = LLVMVoidTypeInContext(builder.context);
-//    let function_type = LLVMFunctionType(void, ptr::null_mut(), 0, 0);
-//    let function = LLVMAddFunction(
-//        builder.module,
-//        b"main\0".as_ptr() as *const _,
-//        function_type,
-//    );
-//
-//    let bb = LLVMAppendBasicBlockInContext(
-//        builder.context,
-//        function,
-//        b"theEntryPoint\0".as_ptr() as *const _,
-//    );
-//
-//    LLVMPositionBuilderAtEnd(builder.builder, bb);
-//
-//    let mut variables = vec![ptr::null_mut(); num_variables];
-//    for i in 0..num_variables {
-//        variables[i] = LLVMBuildAlloca(builder.builder, int64, b"var\0".as_ptr() as *const _);
-//    }
-//
-//    LLVMDumpModule(builder.module);
-//}
