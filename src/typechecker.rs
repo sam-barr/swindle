@@ -461,5 +461,8 @@ fn type_primary(
             state.in_loop = was_in_loop;
             result
         }
+        Primary::StatementExp(body) => {
+            type_body(state, body).map(|(body, ty)| (Box::new(Primary::StatementExp(body)), ty))
+        }
     }
 }

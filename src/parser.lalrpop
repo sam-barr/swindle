@@ -109,7 +109,8 @@ Primary: Primary<Parsed> = {
                 els,
             }
         )
-    }
+    },
+    <body:Body> => Primary::StatementExp(body),
 }
 
 Elif: Elif<Parsed> = {

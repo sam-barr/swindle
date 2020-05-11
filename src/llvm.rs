@@ -358,6 +358,7 @@ unsafe fn cg_primary(builder: &mut Builder, primary: Primary<PCG>) -> LLVMValueR
         }
         Primary::IfExp(ifexp) => cg_ifexp(builder, ifexp),
         Primary::WhileExp(whileexp) => cg_whileexp(builder, whileexp),
+        Primary::StatementExp(body) => cg_body(builder, body),
         Primary::Unit => builder.unit(),
     }
 }

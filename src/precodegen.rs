@@ -170,6 +170,7 @@ fn preprocess_primary(state: &mut PCGState, primary: Primary<Typed>) -> Primary<
         Primary::Variable(v) => Primary::Variable(state.get_variable(v)),
         Primary::IfExp(ifexp) => Primary::IfExp(preprocess_ifexp(state, ifexp)),
         Primary::WhileExp(whileexp) => Primary::WhileExp(preprocess_whileexp(state, whileexp)),
+        Primary::StatementExp(body) => Primary::StatementExp(preprocess_body(state, body)),
         Primary::Unit => Primary::Unit,
     }
 }

@@ -176,6 +176,7 @@ where
     Variable(T::VariableID),
     IfExp(IfExp<T>),
     WhileExp(WhileExp<T>),
+    StatementExp(Body<T>),
     Unit,
 }
 
