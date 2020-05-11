@@ -1,14 +1,14 @@
 int n = 50;
 
-int prev = 1; // this is a comment
-int curr = 1;
+writeln {
+    int prev = 1;
+    int curr = 1;
+    int temp = 1;
 
-int i = 0;
-while i < n-2 {
-    int temp = curr;
-    curr = prev + curr;
-    prev = temp;
-    i = i + 1;
+    while n - 2 > 0 {
+        n    = n - 1;
+        temp = prev;
+        prev = curr;
+        curr = temp + curr;
+    } else { 1; };
 };
-
-writeln curr;

@@ -63,7 +63,7 @@ impl Builder {
             LLVMPositionBuilderAtEnd(builder, start);
             // NOTE end not good
 
-            let fmt_int = LLVMBuildGlobalStringPtr(builder, nm!(b"%d\0"), nm!(b"fmt_int\0"));
+            let fmt_int = LLVMBuildGlobalStringPtr(builder, nm!(b"%ld\0"), nm!(b"fmt_int\0"));
             let fmt_string = LLVMBuildGlobalStringPtr(builder, nm!(b"%s\0"), nm!(b"fmt_string\0"));
             let fmt_true = LLVMBuildGlobalStringPtr(builder, nm!(b"true\0"), nm!(b"fmt_true\0"));
             let fmt_false = LLVMBuildGlobalStringPtr(builder, nm!(b"false\0"), nm!(b"fmt_false\0"));
