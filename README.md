@@ -1,9 +1,7 @@
 # swindle
-A statically typed, expression based imperative language.
-Interpreter implemented in `rust` with a stack based virtual machine.
-Give, a `swindle` source file, run it with
+A statically typed, expression based imperative language which compiles to LLVM.
 
-    cargo run source.sw
+    cargo run source.sw        # prints LLVM-IR to stderr
 
 # FizzBuzz
 The following is fizzbuzz written in "idiomatic" swindle:
