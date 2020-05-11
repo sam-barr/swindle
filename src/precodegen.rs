@@ -80,7 +80,7 @@ fn preprocess_statement(state: &mut PCGState, statement: Statement<Typed>) -> St
             Statement::Write(typ, newline, preprocess_expression(state, *expression))
         }
         Statement::Break => Statement::Break,
-        Statement::Continue => Statement::Break,
+        Statement::Continue => Statement::Continue,
         Statement::Expression(expression) => {
             Statement::Expression(preprocess_expression(state, *expression))
         }
