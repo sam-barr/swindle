@@ -15,11 +15,17 @@ while x <= 100 {
     bool three = x % 3 == 0;
     bool five = x % 5 == 0;
 
-    string fizz = if three { "fizz"; } else { ""; };
-    string buzz = if five  { "buzz"; } else { ""; };
-    string n = if three or five { ""; } else { $ x; };
-    writeln $ fizz buzz n;
+    if three or five {
+        string fizz = if three { "fizz"; } else { ""; };
+        string buzz = if five { "buzz"; } else { ""; };
+        write fizz;
+        writeln buzz;
+    } else {
+        writeln x;
+    };
 
     x = x + 1;
+    unit;
 };
+
 ```
