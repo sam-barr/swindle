@@ -157,7 +157,6 @@ fn preprocess_unary(state: &mut PCGState, unary: Unary<Typed>) -> Box<Unary<PCG>
     Box::new(match unary {
         Unary::Negate(unary) => Unary::Negate(preprocess_unary(state, *unary)),
         Unary::Not(unary) => Unary::Not(preprocess_unary(state, *unary)),
-        Unary::Stringify(_) => unimplemented!(),
         Unary::Primary(primary) => Unary::Primary(Box::new(preprocess_primary(state, *primary))),
     })
 }
@@ -170,8 +169,21 @@ fn preprocess_primary(state: &mut PCGState, primary: Primary<Typed>) -> Primary<
         Primary::BoolLit(b) => Primary::BoolLit(b),
         Primary::Variable(v) => Primary::Variable(state.get_variable(v)),
         Primary::IfExp(ifexp) => Primary::IfExp(preprocess_ifexp(state, ifexp)),
-        Primary::WhileExp(_) => unimplemented!(),
+        Primary::WhileExp(whileexp) => Primary::WhileExp(preprocess_whileexp(state, whileexp)),
         Primary::Unit => Primary::Unit,
+    }
+}
+
+fn preprocess_whileexp(state: &mut PCGState, whileexp: WhileExp<Typed>) -> WhileExp<PCG> {
+    let tag = whileexp.tag;
+    let cond = preprocess_expression(state, *whileexp.cond);
+    let body = preprocess_body(state, whileexp.body);
+    let els = preprocess_body(state, whileexp.els);
+    WhileExp {
+        tag,
+        cond,
+        body,
+        els,
     }
 }
 

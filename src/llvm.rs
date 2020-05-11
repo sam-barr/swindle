@@ -148,7 +148,6 @@ pub fn cg_program(program: Program<PCG>, var_info: Vec<SwindleType>, strings: Ve
         }
         LLVMBuildRetVoid(builder.builder);
         LLVMDeleteBasicBlock(builder.end);
-
         LLVMDumpModule(builder.module);
     }
 }
@@ -323,7 +322,6 @@ unsafe fn cg_unary(builder: &Builder, unary: Unary<PCG>) -> LLVMValueRef {
         Unary::Not(unary) => {
             LLVMBuildNot(builder.builder, cg_unary(builder, *unary), nm!(b"not\0"))
         }
-        Unary::Stringify(_) => unimplemented!(),
         Unary::Primary(primary) => cg_primary(builder, *primary),
     }
 }
@@ -338,9 +336,78 @@ unsafe fn cg_primary(builder: &Builder, primary: Primary<PCG>) -> LLVMValueRef {
             LLVMBuildLoad(builder.builder, builder.variables[id], nm!(b"variable\0"))
         }
         Primary::IfExp(ifexp) => cg_ifexp(builder, ifexp),
-        Primary::WhileExp(_) => unimplemented!(),
+        Primary::WhileExp(whileexp) => cg_whileexp(builder, whileexp),
         Primary::Unit => builder.unit(),
     }
+}
+
+unsafe fn cg_whileexp(builder: &Builder, whileexp: WhileExp<PCG>) -> LLVMValueRef {
+    let typ = match whileexp.tag {
+        SwindleType::Int => builder.int64_ty,
+        SwindleType::Bool => builder.int1_ty,
+        SwindleType::Unit => builder.int1_ty,
+        SwindleType::String => builder.string_ty,
+    };
+
+    //setup blocks and variables
+    let current_block = LLVMGetInsertBlock(builder.builder);
+    let next_block = LLVMGetNextBasicBlock(current_block);
+    let while_result = LLVMBuildAlloca(builder.builder, typ, nm!(b"while_result\0"));
+    // if while_tracker: skip else
+    let while_tracker = LLVMBuildAlloca(builder.builder, builder.int1_ty, nm!(b"while_tracker\0"));
+    LLVMBuildStore(
+        builder.builder,
+        LLVMConstInt(builder.int1_ty, 0, LLVM_FALSE),
+        while_tracker,
+    );
+    let start = LLVMInsertBasicBlockInContext(builder.context, next_block, nm!(b"start\0"));
+    let then = LLVMInsertBasicBlockInContext(builder.context, next_block, nm!(b"then\0"));
+    let otherwise = LLVMInsertBasicBlockInContext(builder.context, next_block, nm!(b"otherwise\0"));
+    let els = LLVMInsertBasicBlockInContext(builder.context, next_block, nm!(b"els\0"));
+    let finally = LLVMInsertBasicBlockInContext(builder.context, next_block, nm!(b"finally\0"));
+    LLVMPositionBuilderAtEnd(builder.builder, current_block);
+    LLVMBuildBr(builder.builder, start);
+    LLVMPositionBuilderAtEnd(builder.builder, start);
+
+    let cond = cg_expression(builder, *whileexp.cond);
+    // while_tracker = while_tracker or cond
+    LLVMBuildStore(
+        builder.builder,
+        LLVMBuildOr(
+            builder.builder,
+            cond,
+            LLVMBuildLoad(builder.builder, while_tracker, nm!(b"\0")),
+            nm!(b"\0"),
+        ),
+        while_tracker,
+    );
+    LLVMBuildCondBr(builder.builder, cond, then, otherwise);
+    LLVMPositionBuilderAtEnd(builder.builder, then);
+    LLVMBuildStore(
+        builder.builder,
+        cg_body(builder, whileexp.body),
+        while_result,
+    );
+    LLVMBuildBr(builder.builder, start);
+
+    LLVMPositionBuilderAtEnd(builder.builder, otherwise);
+    LLVMBuildCondBr(
+        builder.builder,
+        LLVMBuildLoad(builder.builder, while_tracker, nm!(b"\0")),
+        finally,
+        els,
+    );
+
+    LLVMPositionBuilderAtEnd(builder.builder, els);
+    LLVMBuildStore(
+        builder.builder,
+        cg_body(builder, whileexp.els),
+        while_result,
+    );
+    LLVMBuildBr(builder.builder, finally);
+
+    LLVMPositionBuilderAtEnd(builder.builder, finally);
+    LLVMBuildLoad(builder.builder, while_result, nm!(b"whileexp\0"))
 }
 
 unsafe fn cg_ifexp(builder: &Builder, ifexp: IfExp<PCG>) -> LLVMValueRef {
@@ -357,11 +424,6 @@ unsafe fn cg_ifexp(builder: &Builder, ifexp: IfExp<PCG>) -> LLVMValueRef {
     let mut otherwise =
         LLVMInsertBasicBlockInContext(builder.context, next_block, nm!(b"otherwise\0"));
     let finally = LLVMInsertBasicBlockInContext(builder.context, next_block, nm!(b"finally\0"));
-    //let then = LLVMAppendBasicBlockInContext(builder.context, builder.main_fn, nm!(b"then\0"));
-    //let mut otherwise = // NOTE: this may break on nested ifs
-    //    LLVMAppendBasicBlockInContext(builder.context, builder.main_fn, nm!(b"otherwise\0"));
-    //let finally = // NOTE: above note applies here
-    //    LLVMAppendBasicBlockInContext(builder.context, builder.main_fn, nm!(b"finally\0"));
     LLVMPositionBuilderAtEnd(builder.builder, current_block);
     LLVMBuildCondBr(
         builder.builder,
@@ -373,7 +435,6 @@ unsafe fn cg_ifexp(builder: &Builder, ifexp: IfExp<PCG>) -> LLVMValueRef {
     LLVMBuildStore(builder.builder, cg_body(builder, ifexp.body), if_result);
     LLVMBuildBr(builder.builder, finally);
 
-    // TODO: elifs
     for elif in ifexp.elifs {
         let new_then = LLVMInsertBasicBlockInContext(builder.context, finally, nm!(b"then\0"));
         let new_otherwise =

@@ -1,7 +1,10 @@
-int n = 0;
+int n = -1;
+int result = 0;
 
-while true {
-    writeln $ unit if true { if true { break; }; 7; } else { 6; } unit;
-};
+int x = while n > 0 {
+    writeln n;
+    n = n - 1;
+    result = result + n;
+} else { -1; };
 
-writeln "done";
+writeln x;

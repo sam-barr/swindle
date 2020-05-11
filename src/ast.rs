@@ -161,7 +161,6 @@ where
 {
     Negate(Box<Unary<T>>),
     Not(Box<Unary<T>>),
-    Stringify(Vec<Primary<T>>),
     Primary(Box<Primary<T>>),
 }
 
@@ -185,8 +184,10 @@ pub struct WhileExp<T>
 where
     T: Tag,
 {
+    pub tag: T::TypeTag,
     pub cond: Box<Expression<T>>,
     pub body: Body<T>,
+    pub els: Body<T>,
 }
 
 #[derive(Debug)]

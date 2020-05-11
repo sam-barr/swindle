@@ -85,13 +85,7 @@ MulOp: MulOp = {
 Unary: Unary<Parsed> = {
     "-" <u:Unary> => Unary::Negate(Box::new(u)),
     "not" <u:Unary> => Unary::Not(Box::new(u)),
-    "$" <ps:Primary*> => Unary::Stringify(ps),
     <p:Primary> => Unary::Primary(Box::new(p)),
-}
-
-Primaries: Vec<Primary<Parsed>> = {
-    <ps:Primaries> <p:Primary> => { let mut ps = ps; ps.push(p); ps},
-    <p:Primary> => vec![p],
 }
 
 Primary: Primary<Parsed> = {
@@ -102,20 +96,17 @@ Primary: Primary<Parsed> = {
     "unit" => Primary::Unit,
     "true" => Primary::BoolLit(true),
     "false" => Primary::BoolLit(false),
-    "while" <cond:Expression> <body:Body> => {
-        Primary::WhileExp(WhileExp { cond: Box::new(cond), body})
+    "while" <cond:Expression> <body:Body> <els:Els> => {
+        Primary::WhileExp(WhileExp { tag: (), cond: Box::new(cond), body, els})
     },
-    "if" <cond:Expression> <body:Body> <elifs:Elif*> <els:Els?> => {
+    "if" <cond:Expression> <body:Body> <elifs:Elif*> <els:Els> => {
         Primary::IfExp(
             IfExp {
                 tag: (),
                 cond: Box::new(cond),
                 body,
                 elifs,
-                els: match els {
-                    Some(els) => els,
-                    None => Body { statements: Vec::new() },
-                }
+                els,
             }
         )
     }
@@ -126,6 +117,10 @@ Elif: Elif<Parsed> = {
 }
 
 Els: Body<Parsed> = {
+    <els:_Els?> => match els { Some(els) => els, None => Body { statements: Vec::new() } },
+}
+
+_Els: Body<Parsed> = {
     "else" <body:Body> => body,
 }
 

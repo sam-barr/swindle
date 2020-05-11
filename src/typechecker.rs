@@ -170,12 +170,32 @@ fn type_whileexp(
         }
     };
 
-    let body = match type_body(state, whileexp.body) {
-        Ok((body, _)) => body,
+    let (body, body_ty) = match type_body(state, whileexp.body) {
+        Ok(res) => res,
         Err(e) => return Err(e),
     };
 
-    Ok((WhileExp { cond, body }, SwindleType::Unit))
+    let (els, els_ty) = match type_body(state, whileexp.els) {
+        Ok(res) => res,
+        Err(e) => return Err(e),
+    };
+
+    if els_ty != body_ty {
+        throw_error(
+            "type of else doesn't match while body".to_string(),
+            state.file_posn,
+        )
+    } else {
+        Ok((
+            WhileExp {
+                tag: body_ty,
+                cond,
+                body,
+                els,
+            },
+            body_ty,
+        ))
+    }
 }
 
 fn type_ifexp(
@@ -189,7 +209,7 @@ fn type_ifexp(
     };
 
     let (body, iftype) = match type_body(state, ifexp.body) {
-        Ok((body, iftype)) => (body, iftype),
+        Ok(res) => res,
         Err(e) => return Err(e),
     };
 
@@ -200,7 +220,10 @@ fn type_ifexp(
                 if t == iftype {
                     elif
                 } else {
-                    return throw_error("write this later".to_string(), state.file_posn);
+                    return throw_error(
+                        "type of elif body doesn't match if body".to_string(),
+                        state.file_posn,
+                    );
                 }
             }
             Err(e) => return Err(e),
@@ -212,7 +235,10 @@ fn type_ifexp(
             if t == iftype {
                 els
             } else {
-                return throw_error("write this one too".to_string(), state.file_posn);
+                return throw_error(
+                    "type of else body doesn't match if body".to_string(),
+                    state.file_posn,
+                );
             }
         }
         Err(e) => return Err(e),
@@ -402,22 +428,6 @@ fn type_unary(
             SwindleType::Bool => Ok((Box::new(Unary::Negate(u)), t)),
             _ => throw_error("can only not a boolean".to_string(), state.file_posn),
         }),
-        Unary::Stringify(primaries) => {
-            let mut typed_primaries = Vec::new();
-            for primary in primaries {
-                // we don't care about the types of the items of the append
-                // Note: in the future keeping track of the type may be neccesary
-                match type_primary(state, primary) {
-                    Ok((p, _)) => typed_primaries.push(*p),
-                    Err(e) => return Err(e),
-                }
-            }
-
-            Ok((
-                Box::new(Unary::Stringify(typed_primaries)),
-                SwindleType::String,
-            ))
-        }
         Unary::Primary(primary) => {
             type_primary(state, *primary).map(|(p, t)| (Box::new(Unary::Primary(p)), t))
         }
