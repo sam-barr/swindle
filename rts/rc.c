@@ -6,19 +6,24 @@ typedef void (*Destructor)(void *);
 
 typedef struct RC {
     Destructor destructor;
-    void **reference;
+    void *reference;
     int *count;
 } RC;
 
+/*
+ * Drop this reference, and free memory if this was the last reference
+ */
 void drop(RC *rc) {
     *rc->count -= 1;
     if(*rc->count == 0) {
-        rc->destructor(*rc->reference);
-        free(rc->reference);
+        rc->destructor(rc->reference);
         free(rc->count);
     }
 }
 
+/*
+ * copy old to new, increasing the number of references by 1
+ */
 void copy(RC *new, RC *old) {
     *old->count += 1;
     *new = *old;
@@ -29,8 +34,7 @@ void copy(RC *new, RC *old) {
  */
 void new(RC *rc, void *x, void (*destructor)(void *)) {
     rc->destructor = destructor;
-    rc->reference = malloc(sizeof(void *));
-    *rc->reference = x;
+    rc->reference = x;
     rc->count = malloc(sizeof(int));
     *rc->count = 1;
 }
@@ -47,11 +51,11 @@ void relinquish(OwnsString *owner) {
 int main() {
     RC rc1;
     new(&rc1, strdup("Hello, World!"), free);
-    printf("%s\n", (char *)(*rc1.reference));
+    printf("%s\n", (char *)(rc1.reference));
     RC rc2;
     copy(&rc2, &rc1);
     drop(&rc1);
-    printf("%s\n", (char *)(*rc2.reference));
+    printf("%s\n", (char *)(rc2.reference));
     drop(&rc2);
 
     OwnsString *owner = malloc(sizeof(OwnsString));
