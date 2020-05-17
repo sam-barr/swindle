@@ -1,0 +1,5 @@
+#!/bin/bash
+
+base="$(basename -s .sw "$1")"
+swindle "$1" &> "$base".ll
+clang -O2 "$base".ll -o "$base"
