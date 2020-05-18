@@ -141,10 +141,10 @@ fn type_expression(
     expression: Expression<Parsed>,
 ) -> TyperResult<(Box<Expression<Typed>>, SwindleType)> {
     match expression {
-        Expression::Assign(varname, expression) => match state.get(&varname) {
+        Expression::Assign((), varname, expression) => match state.get(&varname) {
             Some(tv) => type_expression(state, *expression).and_then(|(e, te)| {
                 if te == tv {
-                    Ok((Box::new(Expression::Assign(varname, e)), te))
+                    Ok((Box::new(Expression::Assign(te, varname, e)), te))
                 } else {
                     throw_error("bad types for assign".to_string(), state.file_posn)
                 }

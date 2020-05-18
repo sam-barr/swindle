@@ -92,7 +92,8 @@ fn preprocess_expression(
     expression: Expression<Typed>,
 ) -> Box<Expression<PCG>> {
     Box::new(match expression {
-        Expression::Assign(varname, expression) => Expression::Assign(
+        Expression::Assign(typ, varname, expression) => Expression::Assign(
+            typ,
             state.get_variable(varname),
             preprocess_expression(state, *expression),
         ),

@@ -82,7 +82,7 @@ pub enum Expression<T>
 where
     T: Tag,
 {
-    Assign(T::VariableID, Box<Expression<T>>), // TODO: eventually have a LValue enum
+    Assign(T::TypeTag, T::VariableID, Box<Expression<T>>), // TODO: eventually have a LValue enum
     OrExp(Box<OrExp<T>>),
 }
 

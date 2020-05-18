@@ -33,7 +33,7 @@ Type: Type = {
 }
 
 Expression: Expression<Parsed> = {
-    <v:Variable> "=" <e:Expression> => Expression::Assign(v, Box::new(e)),
+    <v:Variable> "=" <e:Expression> => Expression::Assign((), v, Box::new(e)),
     <o:OrExp> => Expression::OrExp(Box::new(o)),
 }
 
