@@ -1,4 +1,6 @@
 #include <stdlib.h>
+#include <string.h>
+
 #include "rc.h"
 
 /*
@@ -16,9 +18,8 @@ void drop(RC *rc) {
  * create a copy of rc
  * actually just increases the count and returns rc, but I think that's fine
  */
-RC *copy(RC *rc) {
+void alloc(RC *rc) {
     *rc->count += 1;
-    return rc;
 }
 
 /*
@@ -30,4 +31,9 @@ void new(RC *rc, void *reference, Destructor destructor) {
     rc->reference = reference;
     rc->count = malloc(sizeof(int));
     *rc->count = 0;
+}
+
+void rc_string(RC *rc, char *s) {
+    char *allocated = strdup(s);
+    new(rc, allocated, free);
 }

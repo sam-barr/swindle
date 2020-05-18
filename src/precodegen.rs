@@ -9,7 +9,7 @@ pub struct PCG {}
 impl Tag for PCG {
     type TypeTag = SwindleType;
     type StatementTag = ();
-    type DeclareTag = ();
+    type DeclareTag = SwindleType;
     type VariableID = usize;
     type StringID = usize;
 }
@@ -72,7 +72,7 @@ pub fn preprocess_program(
 fn preprocess_statement(state: &mut PCGState, statement: Statement<Typed>) -> Statement<PCG> {
     match statement {
         Statement::Declare(typ, varname, expression) => Statement::Declare(
-            (),
+            typ,
             state.add_variable(varname, typ),
             preprocess_expression(state, *expression),
         ),

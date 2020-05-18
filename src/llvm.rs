@@ -12,7 +12,7 @@ use std::ptr;
 const LLVM_FALSE: LLVMBool = 0;
 const LLVM_TRUE: LLVMBool = 1;
 
-const RTS_SOURCES: [&'static [u8]; 2] = [
+const RTS_SOURCES: [&[u8]; 2] = [
     include_bytes!("../rts/io.ll"),
     include_bytes!("../rts/rc.ll"),
 ];
@@ -145,7 +145,7 @@ impl Builder {
     }
 
     unsafe fn string_ty(&self) -> LLVMTypeRef {
-        LLVMPointerType(LLVMInt8TypeInContext(self.context), 0)
+        LLVMGetTypeByName(self.module, nm!("struct.RC"))
     }
 }
 
@@ -186,11 +186,29 @@ pub fn cg_program(program: Program<PCG>, var_info: Vec<SwindleType>, strings: Ve
 
 unsafe fn cg_statement(builder: &mut Builder, statement: Statement<PCG>) -> LLVMValueRef {
     match statement {
-        Statement::Declare(_, id, expression) => LLVMBuildStore(
-            builder.builder,
-            cg_expression(builder, *expression),
-            builder.variables[id],
-        ),
+        Statement::Declare(SwindleType::String, id, expression) => {
+            LLVMBuildStore(
+                builder.builder,
+                cg_expression(builder, *expression),
+                builder.variables[id],
+            );
+            LLVMBuildCall(
+                builder.builder,
+                LLVMGetNamedFunction(builder.module, nm!("alloc")),
+                [builder.variables[id]].as_mut_ptr(),
+                1,
+                nm!(""),
+            );
+            builder.unit()
+        }
+        Statement::Declare(_, id, expression) => {
+            LLVMBuildStore(
+                builder.builder,
+                cg_expression(builder, *expression),
+                builder.variables[id],
+            );
+            builder.unit()
+        }
         Statement::Write(ty, newline, expression) => {
             let print_fn = LLVMGetNamedFunction(
                 builder.module,
@@ -201,14 +219,18 @@ unsafe fn cg_statement(builder: &mut Builder, statement: Statement<PCG>) -> LLVM
                     SwindleType::Unit => nm!("print_unit"),
                 },
             );
+            let expression = match ty {
+                SwindleType::String => {
+                    let tmp = LLVMBuildAlloca(builder.builder, builder.string_ty(), nm!("tmp"));
+                    LLVMBuildStore(builder.builder, cg_expression(builder, *expression), tmp);
+                    tmp
+                }
+                _ => cg_expression(builder, *expression),
+            };
             LLVMBuildCall(
                 builder.builder,
                 print_fn,
-                [
-                    cg_expression(builder, *expression),
-                    builder.const_bool(newline),
-                ]
-                .as_mut_ptr(),
+                [expression, builder.const_bool(newline)].as_mut_ptr(),
                 2,
                 nm!(""),
             );
@@ -327,7 +349,18 @@ unsafe fn cg_primary(builder: &mut Builder, primary: Primary<PCG>) -> LLVMValueR
     match primary {
         Primary::Paren(e) => cg_expression(builder, *e),
         Primary::IntLit(n) => builder.const_int(n),
-        Primary::StringLit(id) => builder.strings[id],
+        Primary::StringLit(id) => {
+            let rc = LLVMBuildAlloca(builder.builder, builder.string_ty(), nm!("str"));
+            LLVMBuildCall(
+                builder.builder,
+                LLVMGetNamedFunction(builder.module, nm!("rc_string")),
+                [rc, builder.strings[id]].as_mut_ptr(),
+                2,
+                nm!(""),
+            );
+
+            LLVMBuildLoad(builder.builder, rc, nm!("str"))
+        }
         Primary::BoolLit(b) => builder.const_bool(b),
         Primary::Variable(id) => {
             LLVMBuildLoad(builder.builder, builder.variables[id], nm!("variable"))

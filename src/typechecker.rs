@@ -4,6 +4,8 @@ use crate::error::*;
 use std::collections::HashMap;
 use std::default::Default;
 
+// TODO: Dissallow statements of type "string" which have no side affects
+
 #[derive(Debug)]
 pub struct Typed {}
 

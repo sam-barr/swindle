@@ -6,7 +6,7 @@ typedef struct RC {
     int *count;
 } RC;
 
-
 void drop(RC *rc);
-RC *copy(RC *rc);
+void alloc(RC *rc);
 void new(RC *rc, void *reference, Destructor destructor);
+void rc_string(RC *rc, char *s);

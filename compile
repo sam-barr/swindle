@@ -1,5 +1,9 @@
 #!/bin/bash
 
+cd rts || exit
+make
+cd .. || exit
 base="$(basename -s .sw "$1")"
+rm "$base" "$base".ll
 swindle "$1" &> "$base".ll
 clang -O2 "$base".ll -o "$base"
