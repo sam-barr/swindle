@@ -11,16 +11,17 @@ bool is_uninit(RC *rc) {
 /*
  * Drop this reference, and free memory if this was the last reference
  */
-void drop(RC **rc) {
-    RC *rc2 = *rc;
-    if(is_uninit(rc2)) {
-        return;
+void drop(RC *rc) {
+    if(is_uninit(rc)) return;
+    *rc->count -= 1;
+    if(*rc->count <= 0) {
+        rc->destructor(rc->reference);
+        free(rc->count);
     }
-    *rc2->count -= 1;
-    if(*rc2->count <= 0) {
-        rc2->destructor(rc2->reference);
-        free(rc2->count);
-    }
+}
+
+void drop2(RC **rc) {
+    drop(*rc);
 }
 
 /*
@@ -59,14 +60,4 @@ void uninit(RC *rc) {
     rc->count = NULL;
     rc->reference = NULL;
     rc->destructor = NULL;
-}
-
-/*
- * Frees the memory if no references are held
- */
-void destruct_if0(RC *rc) {
-    if(*rc->count <= 0) {
-        rc->destructor(rc->reference);
-        free(rc->count);
-    }
 }

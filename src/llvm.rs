@@ -183,11 +183,31 @@ pub fn cg_program(program: Program<PCG>, var_info: Vec<SwindleType>, strings: Ve
 
         for mut string in strings {
             string.push('\0');
-            builder.strings.push(LLVMBuildGlobalStringPtr(
+            let string = LLVMBuildGlobalStringPtr(
                 builder.builder,
                 string.as_ptr() as *const i8,
+                nm!("str_const"),
+            );
+            let rc = LLVMBuildAlloca(
+                builder.builder,
+                LLVMGetTypeByName(builder.module, nm!("struct.RC")),
                 nm!("str"),
-            ));
+            );
+            LLVMBuildCall(
+                builder.builder,
+                LLVMGetNamedFunction(builder.module, nm!("rc_string")),
+                [rc, string].as_mut_ptr(),
+                2,
+                nm!(""),
+            );
+            LLVMBuildCall(
+                builder.builder,
+                LLVMGetNamedFunction(builder.module, nm!("alloc")),
+                [rc].as_mut_ptr(),
+                1,
+                nm!(""),
+            );
+            builder.strings.push(rc);
         }
 
         for tagged_stmt in program.statements {
@@ -197,12 +217,21 @@ pub fn cg_program(program: Program<PCG>, var_info: Vec<SwindleType>, strings: Ve
             if let SwindleType::String = typ {
                 LLVMBuildCall(
                     builder.builder,
-                    LLVMGetNamedFunction(builder.module, nm!("drop")),
+                    LLVMGetNamedFunction(builder.module, nm!("drop2")),
                     [builder.variables[idx]].as_mut_ptr(),
                     1,
                     nm!(""),
                 );
             }
+        }
+        for idx in 0..builder.strings.len() {
+            LLVMBuildCall(
+                builder.builder,
+                LLVMGetNamedFunction(builder.module, nm!("drop")),
+                [builder.strings[idx]].as_mut_ptr(),
+                1,
+                nm!(""),
+            );
         }
         LLVMBuildRetVoid(builder.builder);
         LLVMDeleteBasicBlock(builder.end);
@@ -215,7 +244,7 @@ unsafe fn cg_statement(builder: &mut Builder, statement: Statement<PCG>) -> LLVM
         Statement::Declare(SwindleType::String, id, expression) => {
             LLVMBuildCall(
                 builder.builder,
-                LLVMGetNamedFunction(builder.module, nm!("drop")),
+                LLVMGetNamedFunction(builder.module, nm!("drop2")),
                 [builder.variables[id]].as_mut_ptr(),
                 1,
                 nm!(""),
@@ -256,15 +285,6 @@ unsafe fn cg_statement(builder: &mut Builder, statement: Statement<PCG>) -> LLVM
                 2,
                 nm!(""),
             );
-            if ty == SwindleType::String {
-                LLVMBuildCall(
-                    builder.builder,
-                    LLVMGetNamedFunction(builder.module, nm!("destruct_if0")),
-                    [expression].as_mut_ptr(),
-                    1,
-                    nm!(""),
-                );
-            }
             builder.unit()
         }
         Statement::Break => {
@@ -285,7 +305,7 @@ unsafe fn cg_expression(builder: &mut Builder, expression: Expression<PCG>) -> L
         Expression::Assign(SwindleType::String, id, expression) => {
             LLVMBuildCall(
                 builder.builder,
-                LLVMGetNamedFunction(builder.module, nm!("drop")),
+                LLVMGetNamedFunction(builder.module, nm!("drop2")),
                 [builder.variables[id]].as_mut_ptr(),
                 1,
                 nm!(""),
@@ -399,22 +419,7 @@ unsafe fn cg_primary(builder: &mut Builder, primary: Primary<PCG>) -> LLVMValueR
     match primary {
         Primary::Paren(e) => cg_expression(builder, *e),
         Primary::IntLit(n) => builder.const_int(n),
-        Primary::StringLit(id) => {
-            let rc = LLVMBuildAlloca(
-                builder.builder,
-                LLVMGetTypeByName(builder.module, nm!("struct.RC")),
-                nm!("str"),
-            );
-            LLVMBuildCall(
-                builder.builder,
-                LLVMGetNamedFunction(builder.module, nm!("rc_string")),
-                [rc, builder.strings[id]].as_mut_ptr(),
-                2,
-                nm!(""),
-            );
-
-            rc
-        }
+        Primary::StringLit(id) => builder.strings[id],
         Primary::BoolLit(b) => builder.const_bool(b),
         Primary::Variable(id) => {
             LLVMBuildLoad(builder.builder, builder.variables[id], nm!("variable"))
