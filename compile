@@ -3,7 +3,8 @@
 cd rts || exit
 make
 cd .. || exit
+cargo install --path . --root ~/.local --force --locked
 base="$(basename -s .sw "$1")"
 rm "$base" "$base".ll
 swindle "$1" &> "$base".ll
-clang -O2 "$base".ll -o "$base"
+clang -g "$base".ll -o "$base"

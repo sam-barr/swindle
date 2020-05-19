@@ -4,9 +4,9 @@ use std::boxed::Box;
 use std::default::Default;
 
 pub trait Tag {
-    type TypeTag: core::fmt::Debug;
-    type StatementTag: core::fmt::Debug;
-    type DeclareTag: core::fmt::Debug;
+    type TypeTag: core::fmt::Debug + Copy + Clone;
+    type StatementTag: core::fmt::Debug + Copy + Clone;
+    type DeclareTag: core::fmt::Debug + Copy + Clone;
     type VariableID: core::fmt::Debug;
     type StringID: core::fmt::Debug;
 }
@@ -109,18 +109,18 @@ pub enum CompExp<T>
 where
     T: Tag,
 {
-    Comp(CompOp, Box<AddExp<T>>, Box<AddExp<T>>),
+    Comp(CompOp<T>, Box<AddExp<T>>, Box<AddExp<T>>),
     AddExp(Box<AddExp<T>>),
 }
 
 #[derive(Debug, Copy, Clone)]
-pub enum CompOp {
+pub enum CompOp<T>
+where
+    T: Tag,
+{
     Leq,
     Lt,
-    Eq,
-    Neq,
-    Gt,
-    Geq,
+    Eq(T::TypeTag),
 }
 
 #[derive(Debug)]
@@ -128,13 +128,16 @@ pub enum AddExp<T>
 where
     T: Tag,
 {
-    Add(AddOp, Box<MulExp<T>>, Box<AddExp<T>>),
+    Add(AddOp<T>, Box<MulExp<T>>, Box<AddExp<T>>),
     MulExp(Box<MulExp<T>>),
 }
 
 #[derive(Debug, Copy, Clone)]
-pub enum AddOp {
-    Sum,
+pub enum AddOp<T>
+where
+    T: Tag,
+{
+    Sum(T::TypeTag),
     Difference,
 }
 

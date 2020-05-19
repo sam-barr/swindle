@@ -12,9 +12,10 @@ use std::ptr;
 const LLVM_FALSE: LLVMBool = 0;
 const LLVM_TRUE: LLVMBool = 1;
 
-const RTS_SOURCES: [&[u8]; 2] = [
+const RTS_SOURCES: [&[u8]; 3] = [
     include_bytes!("../rts/io.ll"),
     include_bytes!("../rts/rc.ll"),
+    include_bytes!("../rts/strings.ll"),
 ];
 
 macro_rules! nm {
@@ -356,17 +357,24 @@ unsafe fn cg_andexp(builder: &mut Builder, andexp: AndExp<PCG>) -> LLVMValueRef 
 
 unsafe fn cg_compexp(builder: &mut Builder, compexp: CompExp<PCG>) -> LLVMValueRef {
     match compexp {
-        // NOTE: this won't cover string equality
+        CompExp::Comp(CompOp::Eq(SwindleType::String), addexp1, addexp2) => {
+            let addexp1 = cg_addexp(builder, *addexp1);
+            let addexp2 = cg_addexp(builder, *addexp2);
+            LLVMBuildCall(
+                builder.builder,
+                LLVMGetNamedFunction(builder.module, nm!("streq")),
+                [addexp1, addexp2].as_mut_ptr(),
+                2,
+                nm!(""),
+            )
+        }
         CompExp::Comp(op, addexp1, addexp2) => {
             let addexp1 = cg_addexp(builder, *addexp1);
             let addexp2 = cg_addexp(builder, *addexp2);
             let (pred, name) = match op {
                 CompOp::Leq => (LLVMIntSLE, nm!("leq")),
                 CompOp::Lt => (LLVMIntSLT, nm!("lt")),
-                CompOp::Eq => (LLVMIntEQ, nm!("eq")),
-                CompOp::Neq => (LLVMIntNE, nm!("eq")),
-                CompOp::Gt => (LLVMIntSGT, nm!("gt")),
-                CompOp::Geq => (LLVMIntSGE, nm!("geq")),
+                CompOp::Eq(_) => (LLVMIntEQ, nm!("eq")),
             };
             LLVMBuildICmp(builder.builder, pred, addexp1, addexp2, name)
         }
@@ -380,7 +388,25 @@ unsafe fn cg_addexp(builder: &mut Builder, addexp: AddExp<PCG>) -> LLVMValueRef 
             let mulexp = cg_mulexp(builder, *mulexp);
             let addexp = cg_addexp(builder, *addexp);
             match op {
-                AddOp::Sum => LLVMBuildAdd(builder.builder, mulexp, addexp, nm!("sum")),
+                AddOp::Sum(SwindleType::String) => {
+                    let rc = LLVMBuildAlloca(
+                        builder.builder,
+                        LLVMGetTypeByName(builder.module, nm!("struct.RC")),
+                        nm!("rc"),
+                    );
+                    LLVMBuildCall(
+                        builder.builder,
+                        LLVMGetNamedFunction(builder.module, nm!("append")),
+                        [rc, mulexp, addexp].as_mut_ptr(),
+                        3,
+                        nm!(""),
+                    );
+                    rc
+                }
+                AddOp::Sum(SwindleType::Int) => {
+                    LLVMBuildAdd(builder.builder, mulexp, addexp, nm!("sum"))
+                }
+                AddOp::Sum(_) => panic!("this should be impossible"),
                 AddOp::Difference => {
                     LLVMBuildSub(builder.builder, mulexp, addexp, nm!("difference"))
                 }

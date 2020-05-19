@@ -20,6 +20,9 @@ void drop(RC *rc) {
     }
 }
 
+/*
+ * This function exists to make generating LLVM easier
+ */
 void drop2(RC **rc) {
     drop(*rc);
 }
@@ -60,4 +63,14 @@ void uninit(RC *rc) {
     rc->count = NULL;
     rc->reference = NULL;
     rc->destructor = NULL;
+}
+
+/*
+ * destroy an RC if its count is non-positive
+ */
+void destroy_noref(RC *rc) {
+    if(!is_uninit(rc) && *rc->count <= 0) {
+        rc->destructor(rc->reference);
+        free(rc->count);
+    }
 }

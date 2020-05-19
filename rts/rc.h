@@ -12,3 +12,4 @@ RC *alloc(RC *rc);
 void new(RC *rc, void *reference, Destructor destructor);
 void rc_string(RC *rc, char *s);
 void uninit(RC *rc);
+void destroy_noref(RC *rc);

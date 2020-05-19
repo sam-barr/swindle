@@ -350,9 +350,15 @@ fn type_compexp(
         CompExp::Comp(compop, addexp1, addexp2) => {
             type_addexp(state, *addexp1).and_then(|(a1, t1)| {
                 type_addexp(state, *addexp2).and_then(|(a2, t2)| {
-                    let result = (Box::new(CompExp::Comp(compop, a1, a2)), SwindleType::Bool);
+                    let op = match compop {
+                        CompOp::Leq => CompOp::Leq,
+                        CompOp::Lt => CompOp::Lt,
+                        CompOp::Eq(()) => CompOp::Eq(t1),
+                    };
+
+                    let result = (Box::new(CompExp::Comp(op, a1, a2)), SwindleType::Bool);
                     match compop {
-                        CompOp::Eq | CompOp::Neq => {
+                        CompOp::Eq(_) => {
                             if t1 == t2 {
                                 Ok(result)
                             } else {
@@ -385,10 +391,19 @@ fn type_addexp(
 ) -> TyperResult<(Box<AddExp<Typed>>, SwindleType)> {
     match addexp {
         AddExp::Add(addop, mulexp, addexp) => type_mulexp(state, *mulexp).and_then(|(m, tm)| {
-            type_addexp(state, *addexp).and_then(|(a, ta)| match (tm, ta) {
-                (SwindleType::Int, SwindleType::Int) => {
-                    Ok((Box::new(AddExp::Add(addop, m, a)), SwindleType::Int))
-                }
+            type_addexp(state, *addexp).and_then(|(a, ta)| match (addop, tm, ta) {
+                (AddOp::Sum(()), SwindleType::String, SwindleType::String) => Ok((
+                    Box::new(AddExp::Add(AddOp::Sum(SwindleType::String), m, a)),
+                    SwindleType::String,
+                )),
+                (AddOp::Sum(()), SwindleType::Int, SwindleType::Int) => Ok((
+                    Box::new(AddExp::Add(AddOp::Sum(SwindleType::Int), m, a)),
+                    SwindleType::Int,
+                )),
+                (AddOp::Difference, SwindleType::Int, SwindleType::Int) => Ok((
+                    Box::new(AddExp::Add(AddOp::Difference, m, a)),
+                    SwindleType::Int,
+                )),
                 _ => throw_error("bad types for addition".to_string(), state.file_posn),
             })
         }),

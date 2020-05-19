@@ -123,22 +123,35 @@ fn preprocess_andexp(state: &mut PCGState, andexp: AndExp<Typed>) -> Box<AndExp<
 
 fn preprocess_compexp(state: &mut PCGState, compexp: CompExp<Typed>) -> Box<CompExp<PCG>> {
     Box::new(match compexp {
-        CompExp::Comp(op, addexp1, addexp2) => CompExp::Comp(
-            op,
-            preprocess_addexp(state, *addexp1),
-            preprocess_addexp(state, *addexp2),
-        ),
+        CompExp::Comp(op, addexp1, addexp2) => {
+            let op = match op {
+                CompOp::Leq => CompOp::Leq,
+                CompOp::Lt => CompOp::Lt,
+                CompOp::Eq(t) => CompOp::Eq(t),
+            };
+            CompExp::Comp(
+                op,
+                preprocess_addexp(state, *addexp1),
+                preprocess_addexp(state, *addexp2),
+            )
+        }
         CompExp::AddExp(addexp) => CompExp::AddExp(preprocess_addexp(state, *addexp)),
     })
 }
 
 fn preprocess_addexp(state: &mut PCGState, addexp: AddExp<Typed>) -> Box<AddExp<PCG>> {
     Box::new(match addexp {
-        AddExp::Add(op, mulexp, addexp) => AddExp::Add(
-            op,
-            preprocess_mulexp(state, *mulexp),
-            preprocess_addexp(state, *addexp),
-        ),
+        AddExp::Add(op, mulexp, addexp) => {
+            let op = match op {
+                AddOp::Sum(t) => AddOp::Sum(t),
+                AddOp::Difference => AddOp::Difference,
+            };
+            AddExp::Add(
+                op,
+                preprocess_mulexp(state, *mulexp),
+                preprocess_addexp(state, *addexp),
+            )
+        }
         AddExp::MulExp(mulexp) => AddExp::MulExp(preprocess_mulexp(state, *mulexp)),
     })
 }

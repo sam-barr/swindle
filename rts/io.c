@@ -17,4 +17,5 @@ void print_unit(bool _u, bool newline) {
 
 void print_string(RC *s, bool newline) {
     printf("%s%s", (char *)s->reference, newline ? "\n" : "");
+    destroy_noref(s);
 }

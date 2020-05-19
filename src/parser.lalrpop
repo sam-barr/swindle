@@ -48,17 +48,24 @@ AndExp: AndExp<Parsed> = {
 }
 
 CompExp: CompExp<Parsed> = {
-    <a1:AddExp> <op:CompOp> <a2:AddExp> => CompExp::Comp(op, Box::new(a1), Box::new(a2)),
+    <a1:AddExp> "<=" <a2:AddExp> => CompExp::Comp(CompOp::Leq, Box::new(a1), Box::new(a2)),
+    <a1:AddExp> "<" <a2:AddExp> => CompExp::Comp(CompOp::Lt, Box::new(a1), Box::new(a2)),
+    <a1:AddExp> "==" <a2:AddExp> => CompExp::Comp(CompOp::Eq(()), Box::new(a1), Box::new(a2)),
+    <a1:AddExp> "!=" <a2:AddExp> => {
+        let eq = CompExp::Comp(CompOp::Eq(()), Box::new(a1), Box::new(a2));
+        let and = AndExp::CompExp(Box::new(eq));
+        let or = OrExp::AndExp(Box::new(and));
+        let expression = Expression::OrExp(Box::new(or));
+        let paren = Primary::Paren(Box::new(expression));
+        let unary = Unary::Primary(Box::new(paren));
+        let not = Unary::Not(Box::new(unary));
+        let mul = MulExp::Unary(Box::new(not));
+        let add = AddExp::MulExp(Box::new(mul));
+        CompExp::AddExp(Box::new(add))
+    },
+    <a1:AddExp> ">=" <a2:AddExp> => CompExp::Comp(CompOp::Leq, Box::new(a2), Box::new(a1)),
+    <a1:AddExp> ">" <a2:AddExp> => CompExp::Comp(CompOp::Lt, Box::new(a2), Box::new(a1)),
     <a:AddExp> => CompExp::AddExp(Box::new(a)),
-}
-
-CompOp: CompOp = {
-    "<=" => CompOp::Leq,
-    "<" => CompOp::Lt,
-    "==" => CompOp::Eq,
-    "!=" => CompOp::Neq,
-    ">" => CompOp::Gt,
-    ">=" => CompOp::Geq,
 }
 
 AddExp: AddExp<Parsed> = {
@@ -66,8 +73,8 @@ AddExp: AddExp<Parsed> = {
     <m:MulExp> => AddExp::MulExp(Box::new(m)),
 }
 
-AddOp: AddOp = {
-    "+" => AddOp::Sum,
+AddOp: AddOp<Parsed> = {
+    "+" => AddOp::Sum(()),
     "-" => AddOp::Difference,
 }
 
