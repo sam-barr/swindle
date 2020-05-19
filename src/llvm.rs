@@ -61,7 +61,6 @@ struct Builder {
     strings: Vec<LLVMValueRef>,
     main_fn: LLVMValueRef,
     end: LLVMBasicBlockRef,
-    tracker: LLVMValueRef,
     break_bb: LLVMBasicBlockRef,
     continue_bb: LLVMBasicBlockRef,
 }
@@ -95,7 +94,6 @@ impl Builder {
             LLVMPositionBuilderAtEnd(builder, start);
             // NOTE end not good
 
-            let tracker = ptr::null_mut();
             let break_bb = ptr::null_mut();
             let continue_bb = ptr::null_mut();
 
@@ -107,7 +105,6 @@ impl Builder {
                 strings,
                 main_fn,
                 end,
-                tracker,
                 break_bb,
                 continue_bb,
             }
@@ -115,14 +112,55 @@ impl Builder {
     }
 
     unsafe fn declare_variable(&mut self, typ: SwindleType) {
-        let typ = match typ {
+        let llvm_type = match typ {
             SwindleType::Int => self.int64_ty(),
             SwindleType::Bool => self.int1_ty(),
             SwindleType::Unit => self.int1_ty(),
             SwindleType::String => self.string_ty(),
         };
-        self.variables
-            .push(LLVMBuildAlloca(self.builder, typ, nm!("var")));
+        let var = LLVMBuildAlloca(self.builder, llvm_type, nm!("var"));
+        self.variables.push(var);
+        if typ == SwindleType::String {
+            let rc = LLVMBuildAlloca(
+                self.builder,
+                LLVMGetTypeByName(self.module, nm!("struct.RC")),
+                nm!("rc"),
+            );
+            LLVMBuildCall(
+                self.builder,
+                LLVMGetNamedFunction(self.module, nm!("uninit")),
+                [rc].as_mut_ptr(),
+                1,
+                nm!(""),
+            );
+            LLVMBuildStore(self.builder, rc, var);
+        }
+    }
+
+    unsafe fn add_string(&mut self, mut string: String) {
+        string.push('\0');
+        let string =
+            LLVMBuildGlobalStringPtr(self.builder, string.as_ptr() as *const i8, nm!("str_const"));
+        let rc = LLVMBuildAlloca(
+            self.builder,
+            LLVMGetTypeByName(self.module, nm!("struct.RC")),
+            nm!("str"),
+        );
+        LLVMBuildCall(
+            self.builder,
+            LLVMGetNamedFunction(self.module, nm!("rc_string")),
+            [rc, string].as_mut_ptr(),
+            2,
+            nm!(""),
+        );
+        LLVMBuildCall(
+            self.builder,
+            LLVMGetNamedFunction(self.module, nm!("alloc")),
+            [rc].as_mut_ptr(),
+            1,
+            nm!(""),
+        );
+        self.strings.push(rc);
     }
 
     unsafe fn const_int(&self, n: u64) -> LLVMValueRef {
@@ -163,59 +201,17 @@ impl Drop for Builder {
 pub fn cg_program(program: Program<PCG>, var_info: Vec<SwindleType>, strings: Vec<String>) {
     unsafe {
         let mut builder = Builder::new();
-        for (idx, typ) in var_info.iter().enumerate() {
-            builder.declare_variable(*typ);
-            if let SwindleType::String = typ {
-                let rc = LLVMBuildAlloca(
-                    builder.builder,
-                    LLVMGetTypeByName(builder.module, nm!("struct.RC")),
-                    nm!("rc"),
-                );
-                LLVMBuildCall(
-                    builder.builder,
-                    LLVMGetNamedFunction(builder.module, nm!("uninit")),
-                    [rc].as_mut_ptr(),
-                    1,
-                    nm!(""),
-                );
-                LLVMBuildStore(builder.builder, rc, builder.variables[idx]);
-            }
+        for &typ in &var_info {
+            builder.declare_variable(typ);
         }
-
-        for mut string in strings {
-            string.push('\0');
-            let string = LLVMBuildGlobalStringPtr(
-                builder.builder,
-                string.as_ptr() as *const i8,
-                nm!("str_const"),
-            );
-            let rc = LLVMBuildAlloca(
-                builder.builder,
-                LLVMGetTypeByName(builder.module, nm!("struct.RC")),
-                nm!("str"),
-            );
-            LLVMBuildCall(
-                builder.builder,
-                LLVMGetNamedFunction(builder.module, nm!("rc_string")),
-                [rc, string].as_mut_ptr(),
-                2,
-                nm!(""),
-            );
-            LLVMBuildCall(
-                builder.builder,
-                LLVMGetNamedFunction(builder.module, nm!("alloc")),
-                [rc].as_mut_ptr(),
-                1,
-                nm!(""),
-            );
-            builder.strings.push(rc);
+        for string in strings {
+            builder.add_string(string);
         }
-
         for tagged_stmt in program.statements {
-            cg_statement(&mut builder, tagged_stmt.statement);
+            cg_tagged_statement(&mut builder, tagged_stmt);
         }
-        for (idx, typ) in var_info.iter().enumerate() {
-            if let SwindleType::String = typ {
+        for (idx, &typ) in var_info.iter().enumerate() {
+            if typ == SwindleType::String {
                 LLVMBuildCall(
                     builder.builder,
                     LLVMGetNamedFunction(builder.module, nm!("drop2")),
@@ -238,6 +234,23 @@ pub fn cg_program(program: Program<PCG>, var_info: Vec<SwindleType>, strings: Ve
         LLVMDeleteBasicBlock(builder.end);
         LLVMDumpModule(builder.module);
     }
+}
+
+unsafe fn cg_tagged_statement(
+    builder: &mut Builder,
+    tagged_stmt: TaggedStatement<PCG>,
+) -> LLVMValueRef {
+    let value = cg_statement(builder, tagged_stmt.statement);
+    if tagged_stmt.tag {
+        LLVMBuildCall(
+            builder.builder,
+            LLVMGetNamedFunction(builder.module, nm!("destroy_noref")),
+            [value].as_mut_ptr(),
+            1,
+            nm!(""),
+        );
+    }
+    value
 }
 
 unsafe fn cg_statement(builder: &mut Builder, statement: Statement<PCG>) -> LLVMValueRef {
@@ -293,7 +306,6 @@ unsafe fn cg_statement(builder: &mut Builder, statement: Statement<PCG>) -> LLVM
             builder.unit()
         }
         Statement::Continue => {
-            LLVMBuildStore(builder.builder, builder.const_bool(false), builder.tracker);
             LLVMBuildBr(builder.builder, builder.continue_bb);
             builder.unit()
         }
@@ -458,32 +470,17 @@ unsafe fn cg_primary(builder: &mut Builder, primary: Primary<PCG>) -> LLVMValueR
 }
 
 unsafe fn cg_whileexp(builder: &mut Builder, whileexp: WhileExp<PCG>) -> LLVMValueRef {
-    let typ = match whileexp.tag {
-        SwindleType::Int => builder.int64_ty(),
-        SwindleType::Bool => builder.int1_ty(),
-        SwindleType::Unit => builder.int1_ty(),
-        SwindleType::String => builder.string_ty(),
-    };
-
-    let old_tracker = builder.tracker;
     let old_break_bb = builder.break_bb;
     let old_continue_bb = builder.break_bb;
 
     //setup blocks and variables
     let current_block = LLVMGetInsertBlock(builder.builder);
     let next_block = LLVMGetNextBasicBlock(current_block);
-    let while_result = LLVMBuildAlloca(builder.builder, typ, nm!("while_result"));
-    // if while_tracker: skip else
-    let while_tracker = LLVMBuildAlloca(builder.builder, builder.int1_ty(), nm!("while_tracker"));
-    LLVMBuildStore(builder.builder, builder.const_bool(false), while_tracker);
     let start = LLVMInsertBasicBlockInContext(builder.context, next_block, nm!("start"));
     let then = LLVMInsertBasicBlockInContext(builder.context, next_block, nm!("then"));
     let otherwise = LLVMInsertBasicBlockInContext(builder.context, next_block, nm!("otherwise"));
-    let els = LLVMInsertBasicBlockInContext(builder.context, next_block, nm!("els"));
-    let finally = LLVMInsertBasicBlockInContext(builder.context, next_block, nm!("finally"));
 
-    builder.tracker = while_tracker;
-    builder.break_bb = els;
+    builder.break_bb = otherwise;
     builder.continue_bb = start;
 
     LLVMPositionBuilderAtEnd(builder.builder, current_block);
@@ -491,47 +488,16 @@ unsafe fn cg_whileexp(builder: &mut Builder, whileexp: WhileExp<PCG>) -> LLVMVal
     LLVMPositionBuilderAtEnd(builder.builder, start);
 
     let cond = cg_expression(builder, *whileexp.cond);
-    // while_tracker = while_tracker or cond
-    LLVMBuildStore(
-        builder.builder,
-        LLVMBuildOr(
-            builder.builder,
-            cond,
-            LLVMBuildLoad(builder.builder, while_tracker, nm!("tmp")),
-            nm!("tmp"),
-        ),
-        while_tracker,
-    );
     LLVMBuildCondBr(builder.builder, cond, then, otherwise);
     LLVMPositionBuilderAtEnd(builder.builder, then);
-    LLVMBuildStore(
-        builder.builder,
-        cg_body(builder, whileexp.body),
-        while_result,
-    );
+    cg_body(builder, whileexp.body);
     LLVMBuildBr(builder.builder, start);
 
     LLVMPositionBuilderAtEnd(builder.builder, otherwise);
-    LLVMBuildCondBr(
-        builder.builder,
-        LLVMBuildLoad(builder.builder, while_tracker, nm!("tmp")),
-        finally,
-        els,
-    );
 
-    LLVMPositionBuilderAtEnd(builder.builder, els);
-    LLVMBuildStore(
-        builder.builder,
-        cg_body(builder, whileexp.els),
-        while_result,
-    );
-    LLVMBuildBr(builder.builder, finally);
-
-    builder.tracker = old_tracker;
     builder.break_bb = old_break_bb;
     builder.continue_bb = old_continue_bb;
-    LLVMPositionBuilderAtEnd(builder.builder, finally);
-    LLVMBuildLoad(builder.builder, while_result, nm!("whileexp"))
+    builder.unit()
 }
 
 unsafe fn cg_ifexp(builder: &mut Builder, ifexp: IfExp<PCG>) -> LLVMValueRef {
@@ -587,8 +553,8 @@ unsafe fn cg_ifexp(builder: &mut Builder, ifexp: IfExp<PCG>) -> LLVMValueRef {
 
 unsafe fn cg_body(builder: &mut Builder, body: Body<PCG>) -> LLVMValueRef {
     let mut value = builder.unit();
-    for stmt in body.statements {
-        value = cg_statement(builder, stmt);
+    for tagged_stmt in body.statements {
+        value = cg_tagged_statement(builder, tagged_stmt);
     }
     value
 }

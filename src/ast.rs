@@ -63,7 +63,7 @@ pub struct Body<T>
 where
     T: Tag,
 {
-    pub statements: Vec<Statement<T>>,
+    pub statements: Vec<TaggedStatement<T>>,
 }
 
 impl<T> Default for Body<T>
@@ -188,10 +188,10 @@ pub struct WhileExp<T>
 where
     T: Tag,
 {
+    // once I add lists, this will build a list, hence the type tag
     pub tag: T::TypeTag,
     pub cond: Box<Expression<T>>,
     pub body: Body<T>,
-    pub els: Body<T>,
 }
 
 #[derive(Debug)]

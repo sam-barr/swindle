@@ -8,7 +8,7 @@ pub struct PCG {}
 
 impl Tag for PCG {
     type TypeTag = SwindleType;
-    type StatementTag = ();
+    type StatementTag = bool;
     type DeclareTag = SwindleType;
     type VariableID = usize;
     type StringID = usize;
@@ -62,7 +62,7 @@ pub fn preprocess_program(
     let mut statements = Vec::new();
     for tagged_stmt in program.statements {
         statements.push(TaggedStatement {
-            tag: (),
+            tag: tagged_stmt.tag == SwindleType::String,
             statement: preprocess_statement(&mut state, tagged_stmt.statement),
         })
     }
@@ -184,7 +184,7 @@ fn preprocess_primary(state: &mut PCGState, primary: Primary<Typed>) -> Primary<
         Primary::Variable(v) => Primary::Variable(state.get_variable(v)),
         Primary::IfExp(ifexp) => Primary::IfExp(preprocess_ifexp(state, ifexp)),
         Primary::WhileExp(whileexp) => Primary::WhileExp(preprocess_whileexp(state, whileexp)),
-        Primary::StatementExp(body) => Primary::StatementExp(preprocess_body(state, body)),
+        Primary::StatementExp(body) => Primary::StatementExp(preprocess_body(state, body, true)),
         Primary::Unit => Primary::Unit,
     }
 }
@@ -192,25 +192,19 @@ fn preprocess_primary(state: &mut PCGState, primary: Primary<Typed>) -> Primary<
 fn preprocess_whileexp(state: &mut PCGState, whileexp: WhileExp<Typed>) -> WhileExp<PCG> {
     let tag = whileexp.tag;
     let cond = preprocess_expression(state, *whileexp.cond);
-    let body = preprocess_body(state, whileexp.body);
-    let els = preprocess_body(state, whileexp.els);
-    WhileExp {
-        tag,
-        cond,
-        body,
-        els,
-    }
+    let body = preprocess_body(state, whileexp.body, false);
+    WhileExp { tag, cond, body }
 }
 
 fn preprocess_ifexp(state: &mut PCGState, ifexp: IfExp<Typed>) -> IfExp<PCG> {
     let tag = ifexp.tag;
     let cond = preprocess_expression(state, *ifexp.cond);
-    let body = preprocess_body(state, ifexp.body);
+    let body = preprocess_body(state, ifexp.body, true);
     let mut elifs = Vec::new();
     for elif in ifexp.elifs {
         elifs.push(preprocess_elif(state, elif));
     }
-    let els = preprocess_body(state, ifexp.els);
+    let els = preprocess_body(state, ifexp.els, true);
     IfExp {
         tag,
         cond,
@@ -223,15 +217,21 @@ fn preprocess_ifexp(state: &mut PCGState, ifexp: IfExp<Typed>) -> IfExp<PCG> {
 fn preprocess_elif(state: &mut PCGState, elif: Elif<Typed>) -> Elif<PCG> {
     Elif {
         cond: preprocess_expression(state, *elif.cond),
-        body: preprocess_body(state, elif.body),
+        body: preprocess_body(state, elif.body, true),
     }
 }
 
-fn preprocess_body(state: &mut PCGState, body: Body<Typed>) -> Body<PCG> {
+fn preprocess_body(state: &mut PCGState, body: Body<Typed>, last_used: bool) -> Body<PCG> {
     let mut statements = Vec::new();
-    for stmt in body.statements {
-        statements.push(preprocess_statement(state, stmt));
+    for tagged_stmt in body.statements {
+        statements.push(TaggedStatement::new(
+            tagged_stmt.tag == SwindleType::String,
+            preprocess_statement(state, tagged_stmt.statement),
+        ));
     }
+
+    let idx = statements.len() - 1;
+    statements[idx].tag &= !last_used;
 
     Body { statements }
 }

@@ -11,7 +11,7 @@ pub struct Typed {}
 
 impl Tag for Typed {
     type TypeTag = SwindleType;
-    type StatementTag = ();
+    type StatementTag = SwindleType;
     type DeclareTag = SwindleType;
     type VariableID = String;
     type StringID = String;
@@ -68,7 +68,7 @@ pub fn type_program(program: Program<Parsed>) -> TyperResult<Program<Typed>> {
     for tagged_stmt in program.statements {
         state.file_posn = tagged_stmt.tag;
         match type_statement(&mut state, tagged_stmt.statement) {
-            Ok((stmt, _)) => statements.push(TaggedStatement::new((), stmt)),
+            Ok((stmt, t)) => statements.push(TaggedStatement::new(t, stmt)),
             Err(e) => return Err(e),
         }
     }
@@ -177,27 +177,14 @@ fn type_whileexp(
         Err(e) => return Err(e),
     };
 
-    let (els, els_ty) = match type_body(state, whileexp.els) {
-        Ok(res) => res,
-        Err(e) => return Err(e),
-    };
-
-    if els_ty != body_ty {
-        throw_error(
-            "type of else doesn't match while body".to_string(),
-            state.file_posn,
-        )
-    } else {
-        Ok((
-            WhileExp {
-                tag: body_ty,
-                cond,
-                body,
-                els,
-            },
-            body_ty,
-        ))
-    }
+    Ok((
+        WhileExp {
+            tag: body_ty,
+            cond,
+            body,
+        },
+        SwindleType::Unit,
+    ))
 }
 
 fn type_ifexp(
@@ -285,8 +272,8 @@ fn type_body(
     let mut statements = Vec::new();
     let mut have_jumped = false; // keep track of whether we've seen 'break' or 'continue'
 
-    for stmt in body.statements {
-        match type_statement(&mut state, stmt) {
+    for tagged_stmt in body.statements {
+        match type_statement(&mut state, tagged_stmt.statement) {
             Ok((stmt, t)) => {
                 if have_jumped {
                     return throw_error("unreachable statement".to_string(), state.file_posn);
@@ -295,7 +282,7 @@ fn type_body(
                     have_jumped = true;
                 }
                 body_type = t;
-                statements.push(stmt);
+                statements.push(TaggedStatement::new(t, stmt));
             }
             Err(e) => return Err(e),
         }

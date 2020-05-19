@@ -103,8 +103,8 @@ Primary: Primary<Parsed> = {
     "unit" => Primary::Unit,
     "true" => Primary::BoolLit(true),
     "false" => Primary::BoolLit(false),
-    "while" <cond:Expression> <body:Body> <els:Els> => {
-        Primary::WhileExp(WhileExp { tag: (), cond: Box::new(cond), body, els})
+    "while" <cond:Expression> <body:Body> => {
+        Primary::WhileExp(WhileExp { tag: (), cond: Box::new(cond), body })
     },
     "if" <cond:Expression> <body:Body> <elifs:Elif*> <els:Els> => {
         Primary::IfExp(
@@ -133,7 +133,7 @@ _Els: Body<Parsed> = {
 }
 
 Body: Body<Parsed> = {
-    "{" ";"* <statements:SemiStatement*> "}" => Body { statements }
+    "{" ";"* <statements:TaggedStatement*> "}" => Body { statements }
 }
 
 FP: FilePosition = {
