@@ -1,6 +1,6 @@
-CFLAGS=-S -emit-llvm -O2
+CFLAGS=-S -emit-llvm -O2 -Wall -Wextra
 
-all: io.ll rc.ll strings.ll
+all: io.ll rc.ll strings.ll lists.ll
 
 io.ll: io.c rc.h
 	clang $(CFLAGS) io.c
@@ -10,3 +10,6 @@ rc.ll: rc.c
 
 strings.ll: strings.c
 	clang $(CFLAGS) strings.c
+
+lists.ll: lists.c
+	clang $(CFLAGS) lists.c
