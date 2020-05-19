@@ -1,13 +1,17 @@
 int n = 99;
 
 while n >= 1 {
-    string bottles = if n == 1 { " bottle "; } else { " bottles "; };
-    writeln $ n bottles "of beer on the wall";
-    writeln $ n bottles "of beer";
-    writeln "Take on down, pass it around";
-    bottles = if n-1 == 1 { " bottle "; } else { " bottles "; };
-    writeln $ (n-1) bottles "of beer on the wall";
+    string bottles = " bottle" + if n == 1 { ""; } else { "s"; } + " of beer";
+    write   n;
+    writeln bottles;
+
+    write   n;
+    write   bottles;
+    writeln " of beer";
 
     n = n - 1;
-    writeln "";
+    bottles = " bottle" + if n == 1 { ""; } else { "s"; } + " of beer on the wall\n";
+    writeln "Take on down, pass it around";
+    write   n;
+    writeln bottles;
 };

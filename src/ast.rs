@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use crate::error::*;
 use std::boxed::Box;
 use std::default::Default;

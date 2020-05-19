@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use crate::ast::*;
 use crate::typechecker::*;
 use std::collections::HashMap;

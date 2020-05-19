@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use crate::ast::*;
 use crate::precodegen::*;
 use crate::typechecker::*;
@@ -39,27 +38,12 @@ unsafe fn load_rts_source(context: LLVMContextRef, code: &[u8]) -> LLVMModuleRef
     module
 }
 
-unsafe fn llvm_add_function(
-    name: *const i8,
-    module: LLVMModuleRef,
-    ret: LLVMTypeRef,
-    params: &mut [LLVMTypeRef],
-) -> LLVMValueRef {
-    let num_params = params.len() as u32;
-    LLVMAddFunction(
-        module,
-        name,
-        LLVMFunctionType(ret, params.as_mut_ptr(), num_params, LLVM_FALSE),
-    )
-}
-
 struct Builder {
     context: LLVMContextRef,
     builder: LLVMBuilderRef,
     module: LLVMModuleRef,
     variables: Vec<LLVMValueRef>,
     strings: Vec<LLVMValueRef>,
-    main_fn: LLVMValueRef,
     end: LLVMBasicBlockRef,
     break_bb: LLVMBasicBlockRef,
     continue_bb: LLVMBasicBlockRef,
@@ -103,7 +87,6 @@ impl Builder {
                 module,
                 variables,
                 strings,
-                main_fn,
                 end,
                 break_bb,
                 continue_bb,

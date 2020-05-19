@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use crate::ast::*;
 use crate::error::*;
 use std::collections::HashMap;
@@ -26,7 +25,6 @@ pub enum SwindleType {
     Unit,
 }
 
-type TypeMap = HashMap<String, SwindleType>;
 type TyperResult<A> = Result<A, SwindleError>;
 
 #[derive(Debug, Clone)]
