@@ -12,7 +12,7 @@ void print_bool(bool b, bool newline) {
     printf("%s%s", b ? "true" : "false", newline ? "\n" : "");
 }
 
-void print_unit(bool _u, bool newline) {
+void print_unit(__attribute__((unused)) bool _u, bool newline) {
     printf("()%s", newline ? "\n" : "");
 }
 

@@ -1,9 +1,13 @@
 #include <stdbool.h>
 #include <string.h>
 #include <stdlib.h>
+#include <assert.h>
+#include <stdint.h>
 
 #include "rc.h"
 #include "strings.h"
+
+// TODO: properly handle UTF-8??
 
 bool streq(RC *s1, RC *s2) {
     String *string1 = (String *)s1->reference,
@@ -42,4 +46,25 @@ void rc_string(RC *rc, char *string) {
     s->string = strdup(string);
     s->length = strlen(string);
     new(rc, s, (Destructor) destroy_string);
+}
+
+void index_string1(RC *dest, RC *src, int64_t idx) {
+    index_string2(dest, src, idx, idx+1);
+}
+
+// TODO: fancy things ala python string indexing
+void index_string2(RC *dest, RC *src, int64_t low, int64_t high) {
+    String *src_string = (String *)src->reference;
+    assert(low >= 0 && high >= 0);
+    assert(low <= high && (size_t)high <= src_string->length);
+
+    String *str = malloc(sizeof(String));
+    str->length = high - low;
+    str->string = malloc(high - low + 1);
+    for(int i = low; i < high; i++)
+        str->string[i - low] = src_string->string[i];
+    str->string[high - low] = '\0';
+
+    destroy_noref(src);
+    new(dest, str, (Destructor) destroy_string);
 }

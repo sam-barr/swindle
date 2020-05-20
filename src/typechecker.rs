@@ -467,5 +467,23 @@ fn type_primary(
         Primary::StatementExp(body) => {
             type_body(state, body).map(|(body, ty)| (Box::new(Primary::StatementExp(body)), ty))
         }
+        Primary::Index((), list, index) => {
+            let (list, list_type, result_type) = match type_primary(state, *list) {
+                Ok((list, SwindleType::String)) => (list, SwindleType::String, SwindleType::String),
+                Err(e) => return Err(e),
+                _ => return throw_error("bad type for list".to_string(), state.file_posn),
+            };
+
+            let index = match type_expression(state, *index) {
+                Ok((index, SwindleType::Int)) => index,
+                Err(e) => return Err(e),
+                _ => return throw_error("bad type for list index".to_string(), state.file_posn),
+            };
+
+            Ok((
+                Box::new(Primary::Index(list_type, list, index)),
+                result_type,
+            ))
+        }
     }
 }

@@ -180,6 +180,7 @@ where
     IfExp(IfExp<T>),
     WhileExp(WhileExp<T>),
     StatementExp(Body<T>),
+    Index(T::TypeTag, Box<Primary<T>>, Box<Expression<T>>),
     Unit,
 }
 

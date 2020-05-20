@@ -184,6 +184,11 @@ fn preprocess_primary(state: &mut PCGState, primary: Primary<Typed>) -> Primary<
         Primary::IfExp(ifexp) => Primary::IfExp(preprocess_ifexp(state, ifexp)),
         Primary::WhileExp(whileexp) => Primary::WhileExp(preprocess_whileexp(state, whileexp)),
         Primary::StatementExp(body) => Primary::StatementExp(preprocess_body(state, body, true)),
+        Primary::Index(typ, list, index) => Primary::Index(
+            typ,
+            Box::new(preprocess_primary(state, *list)),
+            preprocess_expression(state, *index),
+        ),
         Primary::Unit => Primary::Unit,
     }
 }

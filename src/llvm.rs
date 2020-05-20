@@ -448,6 +448,24 @@ unsafe fn cg_primary(builder: &mut Builder, primary: Primary<PCG>) -> LLVMValueR
         Primary::IfExp(ifexp) => cg_ifexp(builder, ifexp),
         Primary::WhileExp(whileexp) => cg_whileexp(builder, whileexp),
         Primary::StatementExp(body) => cg_body(builder, body),
+        Primary::Index(SwindleType::String, list, index) => {
+            let list = cg_primary(builder, *list);
+            let index = cg_expression(builder, *index);
+            let rc = LLVMBuildAlloca(
+                builder.builder,
+                LLVMGetTypeByName(builder.module, nm!("struct.RC")),
+                nm!("rc"),
+            );
+            LLVMBuildCall(
+                builder.builder,
+                LLVMGetNamedFunction(builder.module, nm!("index_string1")),
+                [rc, list, index].as_mut_ptr(),
+                3,
+                nm!(""),
+            );
+            rc
+        }
+        Primary::Index(_, _, _) => panic!(),
         Primary::Unit => builder.unit(),
     }
 }

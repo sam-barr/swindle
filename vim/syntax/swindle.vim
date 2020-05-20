@@ -21,4 +21,4 @@ syntax region swindleString start=/\v"/ skip=/\v\\./ end=/\v"/
 highlight link swindleString String
 
 syntax region swindleBlock start="{" end="}" transparent fold
-syntax region swindleParen start="(" end=")"
+syntax region swindleParen start="(" end=")" transparent fold
