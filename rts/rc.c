@@ -48,15 +48,6 @@ void new(RC *rc, void *reference, Destructor destructor) {
 }
 
 /*
- * Creates a RC for a string (usually a string constant)
- * creates a new, malloced copy of s
- */
-void rc_string(RC *rc, char *s) {
-    char *allocated = strdup(s);
-    new(rc, allocated, free);
-}
-
-/*
  * Uninitializes the RC
  */
 void uninit(RC *rc) {
