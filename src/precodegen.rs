@@ -71,7 +71,7 @@ pub fn preprocess_program(
 fn preprocess_statement(state: &mut PCGState, statement: Statement<Typed>) -> Statement<PCG> {
     match statement {
         Statement::Declare(typ, varname, expression) => Statement::Declare(
-            typ,
+            typ.clone(),
             state.add_variable(varname, typ),
             preprocess_expression(state, *expression),
         ),

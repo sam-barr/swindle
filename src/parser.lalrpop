@@ -30,6 +30,7 @@ Type: Type = {
     "string" => Type::String,
     "bool" => Type::Bool,
     "unit" => Type::Unit,
+    "[" <typ:Type> "]" => Type::List(Box::new(typ)),
 }
 
 Expression: Expression<Parsed> = {

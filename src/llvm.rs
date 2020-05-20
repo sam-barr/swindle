@@ -94,7 +94,7 @@ impl Builder {
         }
     }
 
-    unsafe fn declare_variable(&mut self, typ: SwindleType) {
+    unsafe fn declare_variable(&mut self, typ: &SwindleType) {
         let llvm_type = match typ {
             SwindleType::Int => self.int64_ty(),
             SwindleType::Bool => self.int1_ty(),
@@ -103,7 +103,7 @@ impl Builder {
         };
         let var = LLVMBuildAlloca(self.builder, llvm_type, nm!("var"));
         self.variables.push(var);
-        if typ == SwindleType::String {
+        if let SwindleType::String = typ {
             let rc = LLVMBuildAlloca(
                 self.builder,
                 LLVMGetTypeByName(self.module, nm!("struct.RC")),
@@ -184,8 +184,8 @@ impl Drop for Builder {
 pub fn cg_program(program: Program<PCG>, var_info: Vec<SwindleType>, strings: Vec<String>) {
     unsafe {
         let mut builder = Builder::new();
-        for &typ in &var_info {
-            builder.declare_variable(typ);
+        for typ in &var_info {
+            builder.declare_variable(&typ);
         }
         for string in strings {
             builder.add_string(string);
@@ -193,8 +193,8 @@ pub fn cg_program(program: Program<PCG>, var_info: Vec<SwindleType>, strings: Ve
         for tagged_stmt in program.statements {
             cg_tagged_statement(&mut builder, tagged_stmt);
         }
-        for (idx, &typ) in var_info.iter().enumerate() {
-            if typ == SwindleType::String {
+        for (idx, typ) in var_info.iter().enumerate() {
+            if let SwindleType::String = typ {
                 LLVMBuildCall(
                     builder.builder,
                     LLVMGetNamedFunction(builder.module, nm!("drop2")),

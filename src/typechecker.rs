@@ -17,7 +17,7 @@ impl Tag for Typed {
 }
 
 // copy and clone might not work in the future
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum SwindleType {
     Int,
     String,
@@ -44,7 +44,7 @@ impl TyperState {
     }
 
     fn get(&self, varname: &str) -> Option<SwindleType> {
-        self.types.get(varname).copied()
+        self.types.get(varname).cloned()
     }
 
     fn insert(&mut self, varname: String, typ: SwindleType) {
@@ -87,8 +87,8 @@ fn type_statement(
                 )
             } else {
                 type_expression(state, *expression).and_then(|(e, t)| {
-                    if type_matches_swindle_type(typ, t) {
-                        state.insert(varname.to_string(), t);
+                    if type_matches_swindle_type(&typ, &t) {
+                        state.insert(varname.to_string(), t.clone());
                         Ok((Statement::Declare(t, varname, e), SwindleType::Unit))
                     } else {
                         throw_error("bad types for declare".to_string(), state.file_posn)
@@ -124,7 +124,7 @@ fn type_statement(
     }
 }
 
-fn type_matches_swindle_type(typ: Type, swindle: SwindleType) -> bool {
+fn type_matches_swindle_type(typ: &Type, swindle: &SwindleType) -> bool {
     match (typ, swindle) {
         (Type::Int, SwindleType::Int) => true,
         (Type::String, SwindleType::String) => true,
@@ -142,7 +142,7 @@ fn type_expression(
         Expression::Assign((), varname, expression) => match state.get(&varname) {
             Some(tv) => type_expression(state, *expression).and_then(|(e, te)| {
                 if te == tv {
-                    Ok((Box::new(Expression::Assign(te, varname, e)), te))
+                    Ok((Box::new(Expression::Assign(te.clone(), varname, e)), te))
                 } else {
                     throw_error("bad types for assign".to_string(), state.file_posn)
                 }
@@ -233,7 +233,7 @@ fn type_ifexp(
 
     Ok((
         IfExp {
-            tag: iftype,
+            tag: iftype.clone(),
             cond,
             body,
             elifs,
@@ -271,6 +271,7 @@ fn type_body(
     let mut have_jumped = false; // keep track of whether we've seen 'break' or 'continue'
 
     for tagged_stmt in body.statements {
+        state.file_posn = tagged_stmt.tag;
         match type_statement(&mut state, tagged_stmt.statement) {
             Ok((stmt, t)) => {
                 if have_jumped {
@@ -279,7 +280,7 @@ fn type_body(
                 if let Statement::Break | Statement::Continue = stmt {
                     have_jumped = true;
                 }
-                body_type = t;
+                body_type = t.clone();
                 statements.push(TaggedStatement::new(t, stmt));
             }
             Err(e) => return Err(e),
@@ -338,7 +339,7 @@ fn type_compexp(
                     let op = match compop {
                         CompOp::Leq => CompOp::Leq,
                         CompOp::Lt => CompOp::Lt,
-                        CompOp::Eq(()) => CompOp::Eq(t1),
+                        CompOp::Eq(()) => CompOp::Eq(t1.clone()),
                     };
 
                     let result = (Box::new(CompExp::Comp(op, a1, a2)), SwindleType::Bool);

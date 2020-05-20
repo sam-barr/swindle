@@ -3,9 +3,9 @@ use std::boxed::Box;
 use std::default::Default;
 
 pub trait Tag {
-    type TypeTag: core::fmt::Debug + Copy + Clone;
-    type StatementTag: core::fmt::Debug + Copy + Clone;
-    type DeclareTag: core::fmt::Debug + Copy + Clone;
+    type TypeTag: core::fmt::Debug + Clone;
+    type StatementTag: core::fmt::Debug + Clone;
+    type DeclareTag: core::fmt::Debug + Clone;
     type VariableID: core::fmt::Debug;
     type StringID: core::fmt::Debug;
 }
@@ -48,12 +48,13 @@ where
     Expression(Box<Expression<T>>),
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub enum Type {
     Int,
     String,
     Bool,
     Unit,
+    List(Box<Type>),
 }
 
 // make this a tagged statement?
