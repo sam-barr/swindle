@@ -68,3 +68,10 @@ void index_string2(RC *dest, RC *src, int64_t low, int64_t high) {
     destroy_noref(src);
     new(dest, str, (Destructor) destroy_string);
 }
+
+int64_t length_string(RC *s) {
+    String *str = (String *)s->reference;
+    int64_t length = (int64_t)str->length;
+    destroy_noref(s);
+    return length;
+}

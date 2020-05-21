@@ -120,6 +120,15 @@ Primary: Primary<Parsed> = {
     },
     <body:Body> => Primary::StatementExp(body),
     <p:Primary> "[" <e:Expression> "]" => Primary::Index((), Box::new(p), Box::new(e)),
+    <b:Builtin> "(" <args:Args> ")" => Primary::Builtin((b, args)),
+}
+
+Args: Vec<Expression<Parsed>> = {
+    <e:Expression> => vec![e],
+    <mut args:Args> "," <e:Expression> => {
+        args.push(e);
+        args
+    },
 }
 
 Elif: Elif<Parsed> = {
@@ -160,4 +169,5 @@ Str: String = <s:r#""(\\.|[^"\\])*""#> => {
     str
 };
 Num: u64 = <s:r"[0-9]+"> => u64::from_str(s).unwrap();
-Variable: String = <s:r"[a-zA-Z][_a-zA-Z]*"> => s.to_string();
+Variable: String = <s:r"[a-zA-Z][_a-zA-Z0-9]*"> => s.to_string();
+Builtin: String = <s:r"@[_a-zA-Z0-9]+"> => s.to_string();

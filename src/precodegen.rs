@@ -11,6 +11,7 @@ impl Tag for PCG {
     type DeclareTag = SwindleType;
     type VariableID = usize;
     type StringID = usize;
+    type BuiltinID = Builtin<PCG>;
 }
 
 struct PCGState {
@@ -189,7 +190,14 @@ fn preprocess_primary(state: &mut PCGState, primary: Primary<Typed>) -> Primary<
             Box::new(preprocess_primary(state, *list)),
             preprocess_expression(state, *index),
         ),
+        Primary::Builtin(builtin) => Primary::Builtin(preprocess_builtin(state, builtin)),
         Primary::Unit => Primary::Unit,
+    }
+}
+
+fn preprocess_builtin(state: &mut PCGState, builtin: Builtin<Typed>) -> Builtin<PCG> {
+    match builtin {
+        Builtin::Length(e) => Builtin::Length(preprocess_expression(state, *e)),
     }
 }
 

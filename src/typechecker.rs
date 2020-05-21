@@ -3,8 +3,6 @@ use crate::error::*;
 use std::collections::HashMap;
 use std::default::Default;
 
-// TODO: Dissallow statements of type "string" which have no side affects
-
 #[derive(Debug)]
 pub struct Typed {}
 
@@ -14,6 +12,15 @@ impl Tag for Typed {
     type DeclareTag = SwindleType;
     type VariableID = String;
     type StringID = String;
+    type BuiltinID = Builtin<Typed>;
+}
+
+#[derive(Debug)]
+pub enum Builtin<T>
+where
+    T: Tag,
+{
+    Length(Box<Expression<T>>),
 }
 
 // copy and clone might not work in the future
@@ -485,5 +492,26 @@ fn type_primary(
                 result_type,
             ))
         }
+        Primary::Builtin((func, mut args)) => match func.as_ref() {
+            "@length" => {
+                if args.len() == 1 {
+                    type_expression(state, args.pop().unwrap()).and_then(|(arg, typ)| match typ {
+                        SwindleType::String => Ok((
+                            Box::new(Primary::Builtin(Builtin::Length(arg))),
+                            SwindleType::Int,
+                        )),
+                        _ => {
+                            throw_error("@length only accepts strings".to_string(), state.file_posn)
+                        }
+                    })
+                } else {
+                    throw_error(
+                        "@length only accepts exactly 1 argument".to_string(),
+                        state.file_posn,
+                    )
+                }
+            }
+            _ => throw_error(format!("{} is not a builtin", func), state.file_posn),
+        },
     }
 }

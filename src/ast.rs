@@ -8,6 +8,7 @@ pub trait Tag {
     type DeclareTag: core::fmt::Debug + Clone;
     type VariableID: core::fmt::Debug;
     type StringID: core::fmt::Debug;
+    type BuiltinID: core::fmt::Debug;
 }
 
 #[derive(Debug)]
@@ -181,6 +182,7 @@ where
     WhileExp(WhileExp<T>),
     StatementExp(Body<T>),
     Index(T::TypeTag, Box<Primary<T>>, Box<Expression<T>>),
+    Builtin(T::BuiltinID),
     Unit,
 }
 
@@ -225,4 +227,5 @@ impl Tag for Parsed {
     type DeclareTag = Type;
     type VariableID = String;
     type StringID = String;
+    type BuiltinID = (String, Vec<Expression<Parsed>>);
 }

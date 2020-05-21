@@ -465,8 +465,24 @@ unsafe fn cg_primary(builder: &mut Builder, primary: Primary<PCG>) -> LLVMValueR
             );
             rc
         }
-        Primary::Index(_, _, _) => panic!(),
+        Primary::Index(_, _, _) => panic!("this shouldn't happen"),
+        Primary::Builtin(builtin) => cg_builtin(builder, builtin),
         Primary::Unit => builder.unit(),
+    }
+}
+
+unsafe fn cg_builtin(builder: &mut Builder, builtin: Builtin<PCG>) -> LLVMValueRef {
+    match builtin {
+        Builtin::Length(expression) => {
+            let expression = cg_expression(builder, *expression);
+            LLVMBuildCall(
+                builder.builder,
+                LLVMGetNamedFunction(builder.module, nm!("length_string")),
+                [expression].as_mut_ptr(),
+                1,
+                nm!("length"),
+            )
+        }
     }
 }
 
