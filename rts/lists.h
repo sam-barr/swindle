@@ -2,22 +2,18 @@ typedef enum ItemType {
     SW_INT,
     SW_BOOL,
     SW_UNIT,
-    SW_RC,
+    SW_STRING,
+    SW_LIST,
 } ItemType;
 
-typedef union ListItem {
-    int64_t sw_int;
-    bool sw_bool;
-    bool sw_unit;
-    RC sw_rc;
-} ListItem;
-
 typedef struct List {
-    ListItem *items;
+    void *items;
     ItemType item_type;
     size_t length;
     size_t capacity;
 } List;
 
 void destroy_list(List *list);
-void new_list(List *list, ItemType item_type, size_t count, ...);
+void rc_list(RC *rc, ItemType item_type, size_t count, ...);
+void index_list(RC *rc, int64_t idx, void *out);
+int64_t length_list(RC *l);

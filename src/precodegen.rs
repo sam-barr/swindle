@@ -62,7 +62,10 @@ pub fn preprocess_program(
     let mut statements = Vec::new();
     for tagged_stmt in program.statements {
         statements.push(TaggedStatement {
-            tag: tagged_stmt.tag == SwindleType::String,
+            tag: match tagged_stmt.tag {
+                SwindleType::List(_) | SwindleType::String => true,
+                _ => false,
+            },
             statement: preprocess_statement(&mut state, tagged_stmt.statement),
         })
     }
@@ -188,13 +191,20 @@ fn preprocess_primary(state: &mut PCGState, primary: Primary<Typed>) -> Primary<
             preprocess_expression(state, *index),
         ),
         Primary::Builtin(builtin) => Primary::Builtin(preprocess_builtin(state, builtin)),
+        Primary::List(typ, items) => {
+            let mut new_items = Vec::new();
+            for item in items {
+                new_items.push(*preprocess_expression(state, item));
+            }
+            Primary::List(typ, new_items)
+        }
         Primary::Unit => Primary::Unit,
     }
 }
 
 fn preprocess_builtin(state: &mut PCGState, builtin: Builtin<Typed>) -> Builtin<PCG> {
     match builtin {
-        Builtin::Length(e) => Builtin::Length(preprocess_expression(state, *e)),
+        Builtin::Length(typ, e) => Builtin::Length(typ, preprocess_expression(state, *e)),
         Builtin::Write(newline, args) => {
             let mut new_args = Vec::new();
             for (arg, typ) in args {

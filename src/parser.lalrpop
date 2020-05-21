@@ -118,6 +118,8 @@ Primary: Primary<Parsed> = {
     },
     <body:Body> => Primary::StatementExp(body),
     <p:Primary> "[" <e:Expression> "]" => Primary::Index((), Box::new(p), Box::new(e)),
+    "[" <t:Type> ";" <args:Args> "]" => Primary::List(t, args),
+    "[" <t:Type> "]" => Primary::List(t, Vec::new()),
     <b:Builtin> "(" <args:Args> ")" => Primary::Builtin((b, args)),
 }
 

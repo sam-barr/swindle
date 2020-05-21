@@ -20,7 +20,7 @@ pub enum Builtin<T>
 where
     T: Tag,
 {
-    Length(Box<Expression<T>>),
+    Length(T::TypeTag, Box<Expression<T>>),
     Write(bool, Vec<(Expression<T>, T::TypeTag)>),
 }
 
@@ -31,6 +31,7 @@ pub enum SwindleType {
     String,
     Bool,
     Unit,
+    List(Box<SwindleType>),
 }
 
 type TyperResult<A> = Result<A, SwindleError>;
@@ -88,6 +89,7 @@ fn type_statement(
 ) -> TyperResult<(Statement<Typed>, SwindleType)> {
     match statement {
         Statement::Declare(typ, varname, expression) => {
+            let typ = type_to_swindle_type(typ);
             if state.get(&varname).is_some() {
                 throw_error(
                     "cannot declare a variable twice".to_string(),
@@ -95,8 +97,8 @@ fn type_statement(
                 )
             } else {
                 type_expression(state, *expression).and_then(|(e, t)| {
-                    if type_matches_swindle_type(&typ, &t) {
-                        state.insert(varname.to_string(), t.clone());
+                    if typ == t {
+                        state.insert(varname.to_string(), typ);
                         Ok((Statement::Declare(t, varname, e), SwindleType::Unit))
                     } else {
                         throw_error("bad types for declare".to_string(), state.file_posn)
@@ -130,13 +132,13 @@ fn type_statement(
     }
 }
 
-fn type_matches_swindle_type(typ: &Type, swindle: &SwindleType) -> bool {
-    match (typ, swindle) {
-        (Type::Int, SwindleType::Int) => true,
-        (Type::String, SwindleType::String) => true,
-        (Type::Bool, SwindleType::Bool) => true,
-        (Type::Unit, SwindleType::Unit) => true,
-        _ => false,
+fn type_to_swindle_type(typ: Type) -> SwindleType {
+    match typ {
+        Type::Int => SwindleType::Int,
+        Type::String => SwindleType::String,
+        Type::Bool => SwindleType::Bool,
+        Type::Unit => SwindleType::Unit,
+        Type::List(typ) => SwindleType::List(Box::new(type_to_swindle_type(*typ))),
     }
 }
 
@@ -430,11 +432,11 @@ fn type_unary(
 ) -> TyperResult<(Box<Unary<Typed>>, SwindleType)> {
     match unary {
         Unary::Negate(unary) => type_unary(state, *unary).and_then(|(u, t)| match t {
-            SwindleType::Int => Ok((Box::new(Unary::Negate(u)), t)),
+            SwindleType::Int => Ok((Box::new(Unary::Negate(u)), SwindleType::Int)),
             _ => throw_error("can only negate integers".to_string(), state.file_posn),
         }),
         Unary::Not(unary) => type_unary(state, *unary).and_then(|(u, t)| match t {
-            SwindleType::Bool => Ok((Box::new(Unary::Not(u)), t)),
+            SwindleType::Bool => Ok((Box::new(Unary::Not(u)), SwindleType::Bool)),
             _ => throw_error("can only not a boolean".to_string(), state.file_posn),
         }),
         Unary::Primary(primary) => {
@@ -476,6 +478,7 @@ fn type_primary(
         Primary::Index((), list, index) => {
             let (list, list_type, result_type) = match type_primary(state, *list) {
                 Ok((list, SwindleType::String)) => (list, SwindleType::String, SwindleType::String),
+                Ok((list, SwindleType::List(typ))) => (list, SwindleType::List(typ.clone()), *typ),
                 Err(e) => return Err(e),
                 _ => return throw_error("bad type for list".to_string(), state.file_posn),
             };
@@ -493,6 +496,30 @@ fn type_primary(
         }
         Primary::Builtin((func, args)) => type_builtin(state, func, args)
             .map(|(builtin, typ)| (Box::new(Primary::Builtin(builtin)), typ)),
+        Primary::List(typ, items) => {
+            let typ = type_to_swindle_type(typ);
+            let mut new_items = Vec::new();
+            for item in items {
+                match type_expression(state, item) {
+                    Ok((item, t)) => {
+                        if t == typ {
+                            new_items.push(*item);
+                        } else {
+                            return throw_error(
+                                "list element types don't match".to_string(),
+                                state.file_posn,
+                            );
+                        }
+                    }
+                    Err(e) => return Err(e),
+                }
+            }
+
+            Ok((
+                Box::new(Primary::List(typ.clone(), new_items)),
+                SwindleType::List(Box::new(typ)),
+            ))
+        }
     }
 }
 
@@ -505,8 +532,13 @@ fn type_builtin(
         "@length" => {
             if args.len() == 1 {
                 type_expression(state, args.pop().unwrap()).and_then(|(arg, typ)| match typ {
-                    SwindleType::String => Ok((Builtin::Length(arg), SwindleType::Int)),
-                    _ => throw_error("@length only accepts strings".to_string(), state.file_posn),
+                    SwindleType::List(_) | SwindleType::String => {
+                        Ok((Builtin::Length(typ, arg), SwindleType::Int))
+                    }
+                    _ => throw_error(
+                        "@length only accepts strings and lists".to_string(),
+                        state.file_posn,
+                    ),
                 })
             } else {
                 throw_error(

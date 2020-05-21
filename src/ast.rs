@@ -182,6 +182,7 @@ where
     StatementExp(Body<T>),
     Index(T::TypeTag, Box<Primary<T>>, Box<Expression<T>>),
     Builtin(T::BuiltinID),
+    List(T::DeclareTag, Vec<Expression<T>>),
     Unit,
 }
 

@@ -11,10 +11,11 @@ use std::ptr;
 const LLVM_FALSE: LLVMBool = 0;
 const LLVM_TRUE: LLVMBool = 1;
 
-const RTS_SOURCES: [&[u8]; 3] = [
+const RTS_SOURCES: [&[u8]; 4] = [
     include_bytes!("../rts/io.ll"),
     include_bytes!("../rts/rc.ll"),
     include_bytes!("../rts/strings.ll"),
+    include_bytes!("../rts/lists.ll"),
 ];
 
 macro_rules! nm {
@@ -99,11 +100,11 @@ impl Builder {
             SwindleType::Int => self.int64_ty(),
             SwindleType::Bool => self.int1_ty(),
             SwindleType::Unit => self.int1_ty(),
-            SwindleType::String => self.string_ty(),
+            SwindleType::List(_) | SwindleType::String => self.rc_ty(),
         };
         let var = LLVMBuildAlloca(self.builder, llvm_type, nm!("var"));
         self.variables.push(var);
-        if let SwindleType::String = typ {
+        if let SwindleType::List(_) | SwindleType::String = typ {
             let rc = LLVMBuildAlloca(
                 self.builder,
                 LLVMGetTypeByName(self.module, nm!("struct.RC")),
@@ -166,7 +167,7 @@ impl Builder {
         LLVMInt1TypeInContext(self.context)
     }
 
-    unsafe fn string_ty(&self) -> LLVMTypeRef {
+    unsafe fn rc_ty(&self) -> LLVMTypeRef {
         LLVMPointerType(LLVMGetTypeByName(self.module, nm!("struct.RC")), 0)
     }
 }
@@ -194,7 +195,7 @@ pub fn cg_program(program: Program<PCG>, var_info: Vec<SwindleType>, strings: Ve
             cg_tagged_statement(&mut builder, tagged_stmt);
         }
         for (idx, typ) in var_info.iter().enumerate() {
-            if let SwindleType::String = typ {
+            if let SwindleType::List(_) | SwindleType::String = typ {
                 LLVMBuildCall(
                     builder.builder,
                     LLVMGetNamedFunction(builder.module, nm!("drop2")),
@@ -238,7 +239,7 @@ unsafe fn cg_tagged_statement(
 
 unsafe fn cg_statement(builder: &mut Builder, statement: Statement<PCG>) -> LLVMValueRef {
     match statement {
-        Statement::Declare(SwindleType::String, id, expression) => {
+        Statement::Declare(SwindleType::List(_) | SwindleType::String, id, expression) => {
             LLVMBuildCall(
                 builder.builder,
                 LLVMGetNamedFunction(builder.module, nm!("drop2")),
@@ -278,7 +279,7 @@ unsafe fn cg_statement(builder: &mut Builder, statement: Statement<PCG>) -> LLVM
 
 unsafe fn cg_expression(builder: &mut Builder, expression: Expression<PCG>) -> LLVMValueRef {
     match expression {
-        Expression::Assign(SwindleType::String, id, expression) => {
+        Expression::Assign(SwindleType::List(_) | SwindleType::String, id, expression) => {
             LLVMBuildCall(
                 builder.builder,
                 LLVMGetNamedFunction(builder.module, nm!("drop2")),
@@ -428,8 +429,8 @@ unsafe fn cg_primary(builder: &mut Builder, primary: Primary<PCG>) -> LLVMValueR
         Primary::IfExp(ifexp) => cg_ifexp(builder, ifexp),
         Primary::WhileExp(whileexp) => cg_whileexp(builder, whileexp),
         Primary::StatementExp(body) => cg_body(builder, body),
-        Primary::Index(SwindleType::String, list, index) => {
-            let list = cg_primary(builder, *list);
+        Primary::Index(SwindleType::String, string, index) => {
+            let string = cg_primary(builder, *string);
             let index = cg_expression(builder, *index);
             let rc = LLVMBuildAlloca(
                 builder.builder,
@@ -439,25 +440,96 @@ unsafe fn cg_primary(builder: &mut Builder, primary: Primary<PCG>) -> LLVMValueR
             LLVMBuildCall(
                 builder.builder,
                 LLVMGetNamedFunction(builder.module, nm!("index_string1")),
-                [rc, list, index].as_mut_ptr(),
+                [rc, string, index].as_mut_ptr(),
                 3,
                 nm!(""),
             );
             rc
         }
+        Primary::Index(SwindleType::List(typ), list, index) => {
+            let typ = *typ;
+            let list = cg_primary(builder, *list);
+            let index = cg_expression(builder, *index);
+            let item_type = match typ {
+                SwindleType::Int => builder.int64_ty(),
+                SwindleType::Bool | SwindleType::Unit => builder.int1_ty(),
+                SwindleType::List(_) | SwindleType::String => {
+                    LLVMGetTypeByName(builder.module, nm!("struct.RC"))
+                }
+            };
+            let item = LLVMBuildAlloca(builder.builder, item_type, nm!("item"));
+            // index_list expects a void pointer, which is an *i8 in llvm
+            let cast = LLVMBuildBitCast(
+                builder.builder,
+                item,
+                LLVMPointerType(LLVMInt8TypeInContext(builder.context), 0),
+                nm!("cast"),
+            );
+            LLVMBuildCall(
+                builder.builder,
+                LLVMGetNamedFunction(builder.module, nm!("index_list")),
+                [list, index, cast].as_mut_ptr(),
+                3,
+                nm!(""),
+            );
+
+            match typ {
+                SwindleType::Int | SwindleType::Bool | SwindleType::Unit => {
+                    LLVMBuildLoad(builder.builder, item, nm!("item"))
+                }
+                SwindleType::List(_) | SwindleType::String => item,
+            }
+        }
         Primary::Index(_, _, _) => panic!("this shouldn't happen"),
         Primary::Builtin(builtin) => cg_builtin(builder, builtin),
+        Primary::List(typ, items) => {
+            let item_type = LLVMConstInt(
+                LLVMInt32TypeInContext(builder.context),
+                match typ {
+                    SwindleType::Int => 0,     // SW_INT
+                    SwindleType::Bool => 1,    // SW_BOOL
+                    SwindleType::Unit => 2,    // SW_UNIT
+                    SwindleType::String => 3,  // SW_STRING
+                    SwindleType::List(_) => 4, // SW_LIST
+                },
+                LLVM_FALSE,
+            );
+            let rc = LLVMBuildAlloca(
+                builder.builder,
+                LLVMGetTypeByName(builder.module, nm!("struct.RC")),
+                nm!("list"),
+            );
+
+            let mut c_args = vec![rc, item_type, builder.const_int(items.len() as u64)];
+            for item in items {
+                c_args.push(cg_expression(builder, item));
+            }
+            let num_args = c_args.len();
+            LLVMBuildCall(
+                builder.builder,
+                LLVMGetNamedFunction(builder.module, nm!("rc_list")),
+                c_args.as_mut_ptr(),
+                num_args as u32,
+                nm!(""),
+            );
+            rc
+        }
         Primary::Unit => builder.unit(),
     }
 }
 
 unsafe fn cg_builtin(builder: &mut Builder, builtin: Builtin<PCG>) -> LLVMValueRef {
     match builtin {
-        Builtin::Length(expression) => {
+        Builtin::Length(typ, expression) => {
             let expression = cg_expression(builder, *expression);
+            let func = match typ {
+                SwindleType::String => nm!("length_string"),
+                SwindleType::List(_) => nm!("length_list"),
+                _ => panic!("this shouldn't be possible"),
+            };
             LLVMBuildCall(
                 builder.builder,
-                LLVMGetNamedFunction(builder.module, nm!("length_string")),
+                LLVMGetNamedFunction(builder.module, func),
                 [expression].as_mut_ptr(),
                 1,
                 nm!("length"),
@@ -472,6 +544,7 @@ unsafe fn cg_builtin(builder: &mut Builder, builtin: Builtin<PCG>) -> LLVMValueR
                         SwindleType::String => nm!("print_string"),
                         SwindleType::Bool => nm!("print_bool"),
                         SwindleType::Unit => nm!("print_unit"),
+                        SwindleType::List(_) => nm!("print_list"),
                     },
                 );
                 let arg = cg_expression(builder, arg);
@@ -528,7 +601,7 @@ unsafe fn cg_ifexp(builder: &mut Builder, ifexp: IfExp<PCG>) -> LLVMValueRef {
         SwindleType::Int => builder.int64_ty(),
         SwindleType::Bool => builder.int1_ty(),
         SwindleType::Unit => builder.int1_ty(),
-        SwindleType::String => builder.string_ty(),
+        SwindleType::List(_) | SwindleType::String => builder.rc_ty(),
     };
     let current_block = LLVMGetInsertBlock(builder.builder);
     let next_block = LLVMGetNextBasicBlock(current_block);

@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdarg.h>
+#include <assert.h>
 
 #include "rc.h"
 #include "lists.h"
@@ -16,40 +17,76 @@
  */
 
 void destroy_list(List *list) {
-    if(list->item_type == SW_RC) {
-        for(size_t i = 0; i < list->length; i++) {
-            RC rc = list->items[i].sw_rc;
-            drop(&rc);
-        }
+    switch(list->item_type) {
+        case SW_STRING:
+        case SW_LIST:
+            for(size_t i = 0; i < list->length; i++)
+                drop(((RC *)list->items) + i);
+            break;
+        default: break;
     }
     free(list->items);
+    free(list);
 }
 
-void new_list(List *list, ItemType item_type, size_t count, ...) {
-    list->items = malloc(sizeof(ListItem) * count);
-    list->length = list->capacity = count;
+size_t item_size(ItemType item_type) {
+    switch(item_type){
+        case SW_INT: return sizeof(int64_t);
+        case SW_BOOL: return sizeof(int);
+        case SW_UNIT: return 0;
+        case SW_STRING:
+        case SW_LIST: return sizeof(RC);
+    }
+}
+
+void rc_list(RC *rc, ItemType item_type, size_t count, ...) {
+    size_t size = item_size(item_type);
+    List *list = malloc(sizeof(List));
+    list->items = malloc(size * count);
+    list->capacity = item_type == SW_UNIT ? 0 : count;
+    list->length = count;
     list->item_type = item_type;
 
     va_list ap;
     va_start(ap, count);
     for(size_t i = 0; i < count; i++) {
-        ListItem item;
         switch(item_type) {
             case SW_INT:
-                item.sw_int = va_arg(ap, int64_t);
+                ((int64_t *)list->items)[i] = va_arg(ap, int64_t);
                 break;
             case SW_BOOL:
                 // apparently its better to do int instead of bool
-                item.sw_bool = va_arg(ap, int);
+                ((bool *)list->items)[i] = va_arg(ap, int);
                 break;
             case SW_UNIT:
-                item.sw_unit = va_arg(ap, int);
                 break;
-            case SW_RC:
-                item.sw_rc = *alloc(va_arg(ap, RC *));
+            case SW_STRING:
+            case SW_LIST:
+                ((RC *)list->items)[i] = *alloc(va_arg(ap, RC *));
                 break;
         }
-        list->items[i] = item;
     }
     va_end(ap);
+
+    new(rc, list, (Destructor) destroy_list);
+}
+
+void index_list(RC *l, int64_t idx, void *out) {
+    List *list = (List *)l->reference;
+    assert(idx >= 0 && (size_t)idx < list->length);
+    switch(list->item_type) {
+        case SW_INT: *(int64_t *)out = ((int64_t *)list->items)[idx]; break;
+        case SW_BOOL: *(bool *)out = ((bool *)list->items)[idx]; break;
+        case SW_UNIT: *(bool *)out = 0;
+        case SW_STRING:
+        case SW_LIST: *(RC *)out = ((RC *)list->items)[idx]; break;
+    }
+    destroy_noref(l);
+}
+
+int64_t length_list(RC *l) {
+    List *list = (List *)l->reference;
+    int64_t length = (int64_t)list->length;
+    destroy_noref(l);
+    return length;
 }
