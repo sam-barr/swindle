@@ -264,26 +264,6 @@ unsafe fn cg_statement(builder: &mut Builder, statement: Statement<PCG>) -> LLVM
             );
             builder.unit()
         }
-        Statement::Write(ty, newline, expression) => {
-            let print_fn = LLVMGetNamedFunction(
-                builder.module,
-                match ty {
-                    SwindleType::Int => nm!("print_int"),
-                    SwindleType::String => nm!("print_string"),
-                    SwindleType::Bool => nm!("print_bool"),
-                    SwindleType::Unit => nm!("print_unit"),
-                },
-            );
-            let expression = cg_expression(builder, *expression);
-            LLVMBuildCall(
-                builder.builder,
-                print_fn,
-                [expression, builder.const_bool(newline)].as_mut_ptr(),
-                2,
-                nm!(""),
-            );
-            builder.unit()
-        }
         Statement::Break => {
             LLVMBuildBr(builder.builder, builder.break_bb);
             builder.unit()
@@ -482,6 +462,32 @@ unsafe fn cg_builtin(builder: &mut Builder, builtin: Builtin<PCG>) -> LLVMValueR
                 1,
                 nm!("length"),
             )
+        }
+        Builtin::Write(newline, args) => {
+            for (arg, typ) in args {
+                let print_fn = LLVMGetNamedFunction(
+                    builder.module,
+                    match typ {
+                        SwindleType::Int => nm!("print_int"),
+                        SwindleType::String => nm!("print_string"),
+                        SwindleType::Bool => nm!("print_bool"),
+                        SwindleType::Unit => nm!("print_unit"),
+                    },
+                );
+                let arg = cg_expression(builder, arg);
+                LLVMBuildCall(builder.builder, print_fn, [arg].as_mut_ptr(), 1, nm!(""));
+            }
+
+            if newline {
+                LLVMBuildCall(
+                    builder.builder,
+                    LLVMGetNamedFunction(builder.module, nm!("print_line")),
+                    [].as_mut_ptr(),
+                    0,
+                    nm!(""),
+                );
+            }
+            builder.unit()
         }
     }
 }

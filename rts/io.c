@@ -4,20 +4,24 @@
 #include "rc.h"
 #include "strings.h"
 
-void print_int(int64_t i, bool newline) {
-    printf("%ld%s", i, newline ? "\n" : "");
+void print_int(int64_t i) {
+    printf("%ld", i);
 }
 
-void print_bool(bool b, bool newline) {
-    printf("%s%s", b ? "true" : "false", newline ? "\n" : "");
+void print_bool(bool b) {
+    printf("%s", b ? "true" : "false");
 }
 
-void print_unit(__attribute__((unused)) bool _u, bool newline) {
-    printf("()%s", newline ? "\n" : "");
+void print_unit(__attribute__((unused)) bool _u) {
+    printf("()");
 }
 
-void print_string(RC *s, bool newline) {
+void print_string(RC *s) {
     String *str = (String *)s->reference;
-    printf("%s%s", str->string, newline ? "\n" : "");
+    printf("%s", str->string);
     destroy_noref(s);
+}
+
+void print_line() {
+    printf("\n");
 }

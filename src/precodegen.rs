@@ -76,9 +76,6 @@ fn preprocess_statement(state: &mut PCGState, statement: Statement<Typed>) -> St
             state.add_variable(varname, typ),
             preprocess_expression(state, *expression),
         ),
-        Statement::Write(typ, newline, expression) => {
-            Statement::Write(typ, newline, preprocess_expression(state, *expression))
-        }
         Statement::Break => Statement::Break,
         Statement::Continue => Statement::Continue,
         Statement::Expression(expression) => {
@@ -198,6 +195,13 @@ fn preprocess_primary(state: &mut PCGState, primary: Primary<Typed>) -> Primary<
 fn preprocess_builtin(state: &mut PCGState, builtin: Builtin<Typed>) -> Builtin<PCG> {
     match builtin {
         Builtin::Length(e) => Builtin::Length(preprocess_expression(state, *e)),
+        Builtin::Write(newline, args) => {
+            let mut new_args = Vec::new();
+            for (arg, typ) in args {
+                new_args.push((*preprocess_expression(state, arg), typ));
+            }
+            Builtin::Write(newline, new_args)
+        }
     }
 }
 
@@ -242,8 +246,9 @@ fn preprocess_body(state: &mut PCGState, body: Body<Typed>, last_used: bool) -> 
         ));
     }
 
-    let idx = statements.len() - 1;
-    statements[idx].tag &= !last_used;
+    if let Some(tagged_stmt) = statements.last_mut() {
+        tagged_stmt.tag &= !last_used;
+    }
 
     Body { statements }
 }

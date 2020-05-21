@@ -11,4 +11,4 @@ while n - 2 > 0 {
     curr = temp + curr;
 };
 
-writeln curr;
+@writeln(curr);

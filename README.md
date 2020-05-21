@@ -14,16 +14,14 @@ while x <= 100 {
     bool five  = x % 5 == 0;
 
     if three or five {
-        string fizz = if three { "fizz"; } else { ""; };
-        string buzz = if five  { "buzz"; } else { ""; };
-        write fizz;
-        writeln buzz;
+        @writeln(
+            if three { "fizz"; } else { ""; },
+            if five  { "buzz"; } else { ""; }
+        );
     } else {
-        writeln x;
+        @writeln(x);
     };
 
     x = x + 1;
-    unit;
 };
-
 ```

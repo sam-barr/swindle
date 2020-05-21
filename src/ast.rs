@@ -43,7 +43,6 @@ where
     T: Tag,
 {
     Declare(T::DeclareTag, T::VariableID, Box<Expression<T>>),
-    Write(T::TypeTag, bool, Box<Expression<T>>),
     Break,
     Continue,
     Expression(Box<Expression<T>>),

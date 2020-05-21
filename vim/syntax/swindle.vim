@@ -12,7 +12,10 @@ syntax keyword swindleKeyword write writeln
 highlight link swindleKeyword Keyword
 
 syntax keyword swindleBoolean true false
-highlight link swindleBoolean Identifier
+highlight link swindleBoolean Boolean
+
+syntax match swindleGlobal "\v\@[_a-zA-Z0-9]+"
+highlight link swindleGlobal Operator
 
 syntax match swindleNumber "\v\d+"
 highlight link swindleNumber Number

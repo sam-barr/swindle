@@ -14,8 +14,6 @@ TaggedStatement: TaggedStatement<Parsed> = {
 
 Statement: Statement<Parsed> = {
     <t:Type> <v:Variable> "=" <e:Expression> => Statement::Declare(t, v, Box::new(e)),
-    "write" <e:Expression> => Statement::Write((), false, Box::new(e)),
-    "writeln" <e:Expression> => Statement::Write((), true, Box::new(e)),
     "break" => Statement::Break,
     "continue" => Statement::Continue,
     <e:Expression> => Statement::Expression(Box::new(e)),
@@ -129,6 +127,7 @@ Args: Vec<Expression<Parsed>> = {
         args.push(e);
         args
     },
+    => Vec::new(),
 }
 
 Elif: Elif<Parsed> = {

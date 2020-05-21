@@ -21,6 +21,7 @@ where
     T: Tag,
 {
     Length(Box<Expression<T>>),
+    Write(bool, Vec<(Expression<T>, T::TypeTag)>),
 }
 
 // copy and clone might not work in the future
@@ -103,8 +104,6 @@ fn type_statement(
                 })
             }
         }
-        Statement::Write((), newline, expression) => type_expression(state, *expression)
-            .map(|(e, t)| (Statement::Write(t, newline, e), SwindleType::Unit)),
         Statement::Break => {
             if state.in_loop {
                 Ok((Statement::Break, SwindleType::Unit))
@@ -435,7 +434,7 @@ fn type_unary(
             _ => throw_error("can only negate integers".to_string(), state.file_posn),
         }),
         Unary::Not(unary) => type_unary(state, *unary).and_then(|(u, t)| match t {
-            SwindleType::Bool => Ok((Box::new(Unary::Negate(u)), t)),
+            SwindleType::Bool => Ok((Box::new(Unary::Not(u)), t)),
             _ => throw_error("can only not a boolean".to_string(), state.file_posn),
         }),
         Unary::Primary(primary) => {
@@ -492,26 +491,44 @@ fn type_primary(
                 result_type,
             ))
         }
-        Primary::Builtin((func, mut args)) => match func.as_ref() {
-            "@length" => {
-                if args.len() == 1 {
-                    type_expression(state, args.pop().unwrap()).and_then(|(arg, typ)| match typ {
-                        SwindleType::String => Ok((
-                            Box::new(Primary::Builtin(Builtin::Length(arg))),
-                            SwindleType::Int,
-                        )),
-                        _ => {
-                            throw_error("@length only accepts strings".to_string(), state.file_posn)
-                        }
-                    })
-                } else {
-                    throw_error(
-                        "@length only accepts exactly 1 argument".to_string(),
-                        state.file_posn,
-                    )
+        Primary::Builtin((func, args)) => type_builtin(state, func, args)
+            .map(|(builtin, typ)| (Box::new(Primary::Builtin(builtin)), typ)),
+    }
+}
+
+fn type_builtin(
+    state: &mut TyperState,
+    func: String,
+    mut args: Vec<Expression<Parsed>>,
+) -> TyperResult<(Builtin<Typed>, SwindleType)> {
+    match func.as_ref() {
+        "@length" => {
+            if args.len() == 1 {
+                type_expression(state, args.pop().unwrap()).and_then(|(arg, typ)| match typ {
+                    SwindleType::String => Ok((Builtin::Length(arg), SwindleType::Int)),
+                    _ => throw_error("@length only accepts strings".to_string(), state.file_posn),
+                })
+            } else {
+                throw_error(
+                    "@length only accepts exactly 1 argument".to_string(),
+                    state.file_posn,
+                )
+            }
+        }
+        "@write" | "@writeln" => {
+            let mut write_args = Vec::new();
+            for arg in args {
+                match type_expression(state, arg) {
+                    Ok((arg, typ)) => write_args.push((*arg, typ)),
+                    Err(e) => return Err(e),
                 }
             }
-            _ => throw_error(format!("{} is not a builtin", func), state.file_posn),
-        },
+
+            Ok((
+                Builtin::Write(func == "@writeln", write_args),
+                SwindleType::Unit,
+            ))
+        }
+        _ => throw_error(format!("{} is not a builtin", func), state.file_posn),
     }
 }
