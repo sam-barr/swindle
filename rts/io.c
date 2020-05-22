@@ -25,40 +25,35 @@ void print_string(RC *s) {
 }
 
 void print_list(RC *l) {
+    alloc(l); // index_list will destroy a list if no reference is held, so we hold one...
     List *list = (List *)l->reference;
 
     printf("[");
     for(int64_t i = 0; i < (int64_t)list->length; i++) {
-        int64_t n;
-        bool b;
-        RC rc;
+        ListItem item = index_list(l, i);
         switch(list->item_type) {
             case SW_INT:
-                index_list(list, i, &n);
-                print_int(n);
+                print_int(as_int(item));
                 break;
             case SW_BOOL:
-                index_list(list, i, &b);
-                print_bool(b);
+                print_bool(as_bool(item));
                 break;
             case SW_UNIT:
-                print_unit(0);
+                print_unit(as_unit(item));
                 break;
             case SW_STRING:
-                index_list(list, i, &rc);
-                print_string(&rc);
+                print_string(as_rc(item));
                 break;
             case SW_LIST:
-                index_list(list, i, &rc);
-                print_list(&rc);
+                print_list(as_rc(item));
                 break;
         }
-        if(i != list->length - 1)
+        if((size_t)i != list->length - 1)
             printf(", ");
     }
     printf("]");
 
-    destroy_noref(l);
+    drop(l); // and then drop it
 }
 
 void print_line() {

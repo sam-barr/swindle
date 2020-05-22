@@ -9,6 +9,7 @@ while n - 2 > 0 {
     temp = prev;
     prev = curr;
     curr = temp + curr;
+    unit;
 };
 
 @writeln(curr);

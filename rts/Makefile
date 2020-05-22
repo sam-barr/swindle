@@ -1,4 +1,4 @@
-CFLAGS=-S -emit-llvm -O2 -Wall -Wextra
+CFLAGS=-S -O2 -emit-llvm -Wall -Wextra
 
 all: io.ll rc.ll strings.ll lists.ll
 

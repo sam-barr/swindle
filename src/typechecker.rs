@@ -185,11 +185,11 @@ fn type_whileexp(
 
     Ok((
         WhileExp {
-            tag: body_ty,
+            tag: body_ty.clone(),
             cond,
             body,
         },
-        SwindleType::Unit,
+        SwindleType::List(Box::new(body_ty)),
     ))
 }
 

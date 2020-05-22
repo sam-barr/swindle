@@ -450,35 +450,23 @@ unsafe fn cg_primary(builder: &mut Builder, primary: Primary<PCG>) -> LLVMValueR
             let typ = *typ;
             let list = cg_primary(builder, *list);
             let index = cg_expression(builder, *index);
-            let item_type = match typ {
-                SwindleType::Int => builder.int64_ty(),
-                SwindleType::Bool | SwindleType::Unit => builder.int1_ty(),
-                SwindleType::List(_) | SwindleType::String => {
-                    LLVMGetTypeByName(builder.module, nm!("struct.RC"))
-                }
-            };
-            let item = LLVMBuildAlloca(builder.builder, item_type, nm!("item"));
-            // index_list expects a void pointer, which is an *i8 in llvm
-            let cast = LLVMBuildBitCast(
-                builder.builder,
-                item,
-                LLVMPointerType(LLVMInt8TypeInContext(builder.context), 0),
-                nm!("cast"),
-            );
-            LLVMBuildCall(
+            let item = LLVMBuildCall(
                 builder.builder,
                 LLVMGetNamedFunction(builder.module, nm!("index_list")),
-                [list, index, cast].as_mut_ptr(),
-                3,
+                [list, index].as_mut_ptr(),
+                2,
                 nm!(""),
             );
-
-            match typ {
-                SwindleType::Int | SwindleType::Bool | SwindleType::Unit => {
-                    LLVMBuildLoad(builder.builder, item, nm!("item"))
-                }
-                SwindleType::List(_) | SwindleType::String => item,
-            }
+            let func = LLVMGetNamedFunction(
+                builder.module,
+                match typ {
+                    SwindleType::Int => nm!("as_int"),
+                    SwindleType::Bool => nm!("as_bool"),
+                    SwindleType::Unit => nm!("as_unit"),
+                    SwindleType::List(_) | SwindleType::String => nm!("as_rc"),
+                },
+            );
+            LLVMBuildCall(builder.builder, func, [item].as_mut_ptr(), 1, nm!("item"))
         }
         Primary::Index(_, _, _) => panic!("this shouldn't happen"),
         Primary::Builtin(builtin) => cg_builtin(builder, builtin),
@@ -580,20 +568,50 @@ unsafe fn cg_whileexp(builder: &mut Builder, whileexp: WhileExp<PCG>) -> LLVMVal
     builder.continue_bb = start;
 
     LLVMPositionBuilderAtEnd(builder.builder, current_block);
+    // initialize list
+    let item_type = LLVMConstInt(
+        LLVMInt32TypeInContext(builder.context),
+        match whileexp.tag {
+            SwindleType::Int => 0,     // SW_INT
+            SwindleType::Bool => 1,    // SW_BOOL
+            SwindleType::Unit => 2,    // SW_UNIT
+            SwindleType::String => 3,  // SW_STRING
+            SwindleType::List(_) => 4, // SW_LIST
+        },
+        LLVM_FALSE,
+    );
+    let rc = LLVMBuildAlloca(
+        builder.builder,
+        LLVMGetTypeByName(builder.module, nm!("struct.RC")),
+        nm!("while_list"),
+    );
+    LLVMBuildCall(
+        builder.builder,
+        LLVMGetNamedFunction(builder.module, nm!("rc_list")),
+        [rc, item_type, builder.const_int(0)].as_mut_ptr(),
+        3,
+        nm!(""),
+    );
     LLVMBuildBr(builder.builder, start);
     LLVMPositionBuilderAtEnd(builder.builder, start);
 
     let cond = cg_expression(builder, *whileexp.cond);
     LLVMBuildCondBr(builder.builder, cond, then, otherwise);
     LLVMPositionBuilderAtEnd(builder.builder, then);
-    cg_body(builder, whileexp.body);
+    LLVMBuildCall(
+        builder.builder,
+        LLVMGetNamedFunction(builder.module, nm!("push_")),
+        [rc, cg_body(builder, whileexp.body)].as_mut_ptr(),
+        2,
+        nm!(""),
+    );
     LLVMBuildBr(builder.builder, start);
 
     LLVMPositionBuilderAtEnd(builder.builder, otherwise);
 
     builder.break_bb = old_break_bb;
     builder.continue_bb = old_continue_bb;
-    builder.unit()
+    rc
 }
 
 unsafe fn cg_ifexp(builder: &mut Builder, ifexp: IfExp<PCG>) -> LLVMValueRef {

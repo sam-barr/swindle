@@ -7,14 +7,9 @@
 #include "rc.h"
 #include "lists.h"
 
-/*
- * Optimization ideas:
- * For a list of RCs, they (theoretically) should all have the same destructor,
- * so we could save memory be optimizing that out.
- *
- * A list of units doesn't need to actually make the list;
- * just knowing the length is enough.
- */
+#define GROW_CAPACITY(capacity) (2 * (capacity))
+#define MIN_CAPACITY 8
+#define MAX(A,B) ((A) > (B) ? (A) : (B))
 
 void destroy_list(List *list) {
     switch(list->item_type) {
@@ -42,8 +37,8 @@ size_t item_size(ItemType item_type) {
 void rc_list(RC *rc, ItemType item_type, size_t count, ...) {
     size_t size = item_size(item_type);
     List *list = malloc(sizeof(List));
-    list->items = malloc(size * count);
-    list->capacity = item_type == SW_UNIT ? 0 : count;
+    list->capacity = item_type == SW_UNIT ? 0 : MAX(count, MIN_CAPACITY);
+    list->items = malloc(size * list->capacity);
     list->length = count;
     list->item_type = item_type;
 
@@ -71,17 +66,21 @@ void rc_list(RC *rc, ItemType item_type, size_t count, ...) {
     new(rc, list, (Destructor) destroy_list);
 }
 
-void index_list(RC *l, int64_t idx, void *out) {
+ListItem index_list(RC *l, int64_t idx) {
     List *list = (List *)l->reference;
     assert(idx >= 0 && (size_t)idx < list->length);
+
+    ListItem item;
     switch(list->item_type) {
-        case SW_INT: *(int64_t *)out = ((int64_t *)list->items)[idx]; break;
-        case SW_BOOL: *(bool *)out = ((bool *)list->items)[idx]; break;
-        case SW_UNIT: *(bool *)out = 0;
+        case SW_INT: item.n = ((int64_t *)list->items)[idx]; break;
+        case SW_BOOL: item.b = ((bool *)list->items)[idx]; break;
+        case SW_UNIT: item.u = 0;
         case SW_STRING:
-        case SW_LIST: *(RC *)out = ((RC *)list->items)[idx]; break;
+        case SW_LIST: item.rc = ((RC *)list->items) + idx; break;
     }
     destroy_noref(l);
+
+    return item;
 }
 
 int64_t length_list(RC *l) {
@@ -89,4 +88,53 @@ int64_t length_list(RC *l) {
     int64_t length = (int64_t)list->length;
     destroy_noref(l);
     return length;
+}
+
+int64_t as_int(ListItem item) {
+    return item.n;
+}
+
+bool as_bool(ListItem item) {
+    return item.b;
+}
+
+bool as_unit(ListItem item) {
+    return item.u;
+}
+
+RC *as_rc(ListItem item) {
+    return item.rc;
+}
+
+// varargs is a hack to accept any type as input
+void push_(RC *l, ...) {
+    List *list = (List *)l->reference;
+
+    if(list->length == list->capacity) {
+        list->capacity = GROW_CAPACITY(list->capacity);
+        list->items = realloc(list->items, item_size(list->item_type) * list->capacity);
+    }
+    //printf("%zu   %zu\n", list->capacity, list->length);
+
+    va_list ap;
+    va_start(ap, l);
+    switch(list->item_type) {
+        case SW_INT:
+            ((int64_t *)list->items)[list->length] = va_arg(ap, int64_t);
+            break;
+        case SW_BOOL:
+            ((bool *)list->items)[list->length] = va_arg(ap, int);
+            break;
+        case SW_UNIT: // unit list just keeps track of the length
+            break;
+        case SW_STRING:
+        case SW_LIST:
+            ((RC *)list->items)[list->length] = *alloc(va_arg(ap, RC *));
+            break;
+    }
+    va_end(ap);
+    list->length += 1;
+
+    // NOTE: do NOT destroy_noref here, since no reference is had
+    // while a While loop is building a list
 }
