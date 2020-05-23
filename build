@@ -1,0 +1,6 @@
+#!/bin/bash
+
+cd rts
+make
+cd ..
+cargo install --path . --root ~/.local --force --locked

@@ -1,3 +1,4 @@
+#![feature(box_patterns)]
 #![feature(or_patterns)]
 pub mod ast;
 pub mod error;

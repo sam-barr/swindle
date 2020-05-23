@@ -279,31 +279,75 @@ unsafe fn cg_statement(builder: &mut Builder, statement: Statement<PCG>) -> LLVM
 
 unsafe fn cg_expression(builder: &mut Builder, expression: Expression<PCG>) -> LLVMValueRef {
     match expression {
-        Expression::Assign(SwindleType::List(_) | SwindleType::String, id, expression) => {
-            LLVMBuildCall(
-                builder.builder,
-                LLVMGetNamedFunction(builder.module, nm!("drop2")),
-                [builder.variables[id]].as_mut_ptr(),
-                1,
-                nm!(""),
-            );
-            let expression = cg_expression(builder, *expression);
-            let rc = LLVMBuildCall(
-                builder.builder,
-                LLVMGetNamedFunction(builder.module, nm!("alloc")),
-                [expression].as_mut_ptr(),
-                1,
-                nm!("rc"),
-            );
-            LLVMBuildStore(builder.builder, rc, builder.variables[id]);
+        Expression::Assign(typ, box LValue::Variable(id), expression) => {
+            let is_rc = if let SwindleType::List(_) | SwindleType::String = typ {
+                true
+            } else {
+                false
+            };
+            let var = builder.variables[id];
+            let expression = if is_rc {
+                LLVMBuildCall(
+                    builder.builder,
+                    LLVMGetNamedFunction(builder.module, nm!("drop2")),
+                    [var].as_mut_ptr(),
+                    1,
+                    nm!(""),
+                );
+                LLVMBuildCall(
+                    builder.builder,
+                    LLVMGetNamedFunction(builder.module, nm!("alloc")),
+                    [cg_expression(builder, *expression)].as_mut_ptr(),
+                    1,
+                    nm!("rc"),
+                )
+            } else {
+                cg_expression(builder, *expression)
+            };
+            LLVMBuildStore(builder.builder, expression, var);
             expression
         }
-        Expression::Assign(_, id, expression) => {
-            let value = cg_expression(builder, *expression);
-            LLVMBuildStore(builder.builder, value, builder.variables[id]);
-            value
+        Expression::Assign(typ, box LValue::Index(lvalue, index), expression) => {
+            let lvalue = cg_lvalue(builder, *lvalue);
+            let index = cg_expression(builder, *index);
+            let expression = if let SwindleType::List(_) | SwindleType::String = typ {
+                LLVMBuildCall(
+                    builder.builder,
+                    LLVMGetNamedFunction(builder.module, nm!("alloc")),
+                    [cg_expression(builder, *expression)].as_mut_ptr(),
+                    1,
+                    nm!("rc"),
+                )
+            } else {
+                cg_expression(builder, *expression)
+            };
+            LLVMBuildCall(
+                builder.builder,
+                LLVMGetNamedFunction(builder.module, nm!("set_")),
+                [lvalue, index, expression].as_mut_ptr(),
+                3,
+                nm!(""),
+            );
+            expression
         }
         Expression::OrExp(orexp) => cg_orexp(builder, *orexp),
+    }
+}
+
+unsafe fn cg_lvalue(builder: &mut Builder, lvalue: LValue<PCG>) -> LLVMValueRef {
+    match lvalue {
+        LValue::Variable(id) => LLVMBuildLoad(builder.builder, builder.variables[id], nm!("lv")),
+        LValue::Index(lvalue, index) => {
+            let lvalue = cg_lvalue(builder, *lvalue);
+            let index = cg_expression(builder, *index);
+            LLVMBuildCall(
+                builder.builder,
+                LLVMGetNamedFunction(builder.module, nm!("get_setter_")),
+                [lvalue, index].as_mut_ptr(),
+                2,
+                nm!("index"),
+            )
+        }
     }
 }
 

@@ -92,12 +92,22 @@ fn preprocess_expression(
     expression: Expression<Typed>,
 ) -> Box<Expression<PCG>> {
     Box::new(match expression {
-        Expression::Assign(typ, varname, expression) => Expression::Assign(
+        Expression::Assign(typ, lvalue, expression) => Expression::Assign(
             typ,
-            state.get_variable(varname),
+            preprocess_lvalue(state, *lvalue),
             preprocess_expression(state, *expression),
         ),
         Expression::OrExp(orexp) => Expression::OrExp(preprocess_orexp(state, *orexp)),
+    })
+}
+
+fn preprocess_lvalue(state: &mut PCGState, lvalue: LValue<Typed>) -> Box<LValue<PCG>> {
+    Box::new(match lvalue {
+        LValue::Variable(varname) => LValue::Variable(state.get_variable(varname)),
+        LValue::Index(lvalue, index) => LValue::Index(
+            preprocess_lvalue(state, *lvalue),
+            preprocess_expression(state, *index),
+        ),
     })
 }
 

@@ -82,8 +82,30 @@ pub enum Expression<T>
 where
     T: Tag,
 {
-    Assign(T::TypeTag, T::VariableID, Box<Expression<T>>), // TODO: eventually have a LValue enum
+    Assign(T::TypeTag, Box<LValue<T>>, Box<Expression<T>>),
     OrExp(Box<OrExp<T>>),
+}
+
+#[derive(Debug)]
+pub enum LValue<T>
+where
+    T: Tag,
+{
+    Variable(T::VariableID),
+    Index(Box<LValue<T>>, Box<Expression<T>>),
+}
+
+pub fn primary_to_lvalue<T>(primary: Primary<T>) -> Option<LValue<T>>
+where
+    T: Tag,
+{
+    match primary {
+        Primary::Variable(var) => Some(LValue::Variable(var)),
+        Primary::Index(_, primary, expression) => {
+            primary_to_lvalue(*primary).map(|lvalue| LValue::Index(Box::new(lvalue), expression))
+        }
+        _ => None,
+    }
 }
 
 #[derive(Debug)]

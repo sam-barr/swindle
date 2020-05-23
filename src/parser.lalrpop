@@ -2,6 +2,8 @@ use std::str::FromStr;
 use swindle::ast::*;
 use swindle::error::*;
 
+use lalrpop_util::ParseError;
+
 grammar;
 
 pub Program: Program<Parsed> = {
@@ -32,8 +34,17 @@ Type: Type = {
 }
 
 Expression: Expression<Parsed> = {
-    <v:Variable> "=" <e:Expression> => Expression::Assign((), v, Box::new(e)),
+    <p:Primary> "=" <e:Expression> =>? {
+        match primary_to_lvalue(p) {
+            Some(lvalue) => Ok(Expression::Assign((), Box::new(lvalue), Box::new(e))),
+            None => Err(ParseError::User { error: "LHS of assignment needs to be an lvalue" }),
+        }
+    },
     <o:OrExp> => Expression::OrExp(Box::new(o)),
+}
+
+LValueBracket: Expression<Parsed> = {
+    "[" <e:Expression> "]" => e
 }
 
 OrExp: OrExp<Parsed> = {

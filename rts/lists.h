@@ -31,3 +31,5 @@ bool as_unit(ListItem item);
 RC *as_rc(ListItem item);
 
 void push_(RC *l, ...);
+void set_(RC *l, int64_t idx, ...);
+void set_varargs_(RC *l, int64_t idx, va_list ap);

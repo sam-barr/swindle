@@ -114,27 +114,56 @@ void push_(RC *l, ...) {
         list->capacity = GROW_CAPACITY(list->capacity);
         list->items = realloc(list->items, item_size(list->item_type) * list->capacity);
     }
-    //printf("%zu   %zu\n", list->capacity, list->length);
+    if(list->item_type == SW_STRING || list->item_type == SW_LIST)
+        uninit(((RC *)list->items) + list->length);
+    list->length += 1;
 
     va_list ap;
     va_start(ap, l);
+    set_varargs_(l, list->length - 1, ap);
+    va_end(ap);
+
+    // NOTE: do NOT destroy_noref here, since no reference is had
+    // while a While loop is building a list
+}
+
+void set_(RC *l, int64_t idx, ...) {
+    List *list = (List *)l->reference;
+    assert(idx >= 0 && (size_t)idx < list->length);
+
+    va_list ap;
+    va_start(ap, idx);
+    set_varargs_(l, idx, ap);
+    va_end(ap);
+}
+
+void set_varargs_(RC *l, int64_t idx, va_list ap) {
+    List *list = (List *)l->reference;
+    assert(idx >= 0 && (size_t)idx < list->length);
+
     switch(list->item_type) {
         case SW_INT:
-            ((int64_t *)list->items)[list->length] = va_arg(ap, int64_t);
+            ((int64_t *)list->items)[idx] = va_arg(ap, int64_t);
             break;
         case SW_BOOL:
-            ((bool *)list->items)[list->length] = va_arg(ap, int);
+            ((bool *)list->items)[idx] = va_arg(ap, int);
             break;
         case SW_UNIT: // unit list just keeps track of the length
             break;
         case SW_STRING:
         case SW_LIST:
-            ((RC *)list->items)[list->length] = *alloc(va_arg(ap, RC *));
+            drop(((RC *)list->items) + idx);
+            ((RC *)list->items)[idx] = *va_arg(ap, RC *);
             break;
     }
-    va_end(ap);
-    list->length += 1;
+}
 
-    // NOTE: do NOT destroy_noref here, since no reference is had
-    // while a While loop is building a list
+RC *get_setter_(RC *l, int64_t idx) {
+    List *list = (List *)l->reference;
+    assert(idx >= 0 && (size_t)idx < list->length);
+    assert(list->item_type == SW_LIST); 
+    // theoretically that should be caught by the type checker,
+    // but may as well throw it in
+
+    return ((RC *)list->items) + idx;
 }

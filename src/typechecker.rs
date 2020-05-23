@@ -147,19 +147,40 @@ fn type_expression(
     expression: Expression<Parsed>,
 ) -> TyperResult<(Box<Expression<Typed>>, SwindleType)> {
     match expression {
-        Expression::Assign((), varname, expression) => match state.get(&varname) {
-            Some(tv) => type_expression(state, *expression).and_then(|(e, te)| {
-                if te == tv {
-                    Ok((Box::new(Expression::Assign(te.clone(), varname, e)), te))
-                } else {
-                    throw_error("bad types for assign".to_string(), state.file_posn)
-                }
-            }),
-            None => throw_error(format!("undeclared variable {}", varname), state.file_posn),
-        },
+        Expression::Assign((), lvalue, expression) => {
+            type_lvalue(state, *lvalue).and_then(|(lv, tlv)| {
+                type_expression(state, *expression).and_then(|(e, te)| {
+                    if te == tlv {
+                        Ok((Box::new(Expression::Assign(te.clone(), lv, e)), te))
+                    } else {
+                        throw_error("bad types for assign".to_string(), state.file_posn)
+                    }
+                })
+            })
+        }
         Expression::OrExp(orexp) => {
             type_orexp(state, *orexp).map(|(o, t)| (Box::new(Expression::OrExp(o)), t))
         }
+    }
+}
+
+fn type_lvalue(
+    state: &mut TyperState,
+    lvalue: LValue<Parsed>,
+) -> TyperResult<(Box<LValue<Typed>>, SwindleType)> {
+    match lvalue {
+        LValue::Variable(varname) => match state.get(&varname) {
+            Some(typ) => Ok((Box::new(LValue::Variable(varname)), typ)),
+            None => throw_error(format!("undeclared variable {}", varname), state.file_posn),
+        },
+        LValue::Index(lvalue, index) => type_lvalue(state, *lvalue).and_then(|(lv, tlv)| {
+            type_expression(state, *index).and_then(|(index, tindex)| match (tlv, tindex) {
+                (SwindleType::List(typ), SwindleType::Int) => {
+                    Ok((Box::new(LValue::Index(lv, index)), *typ))
+                }
+                _ => throw_error("you absolute buffoon".to_string(), state.file_posn),
+            })
+        }),
     }
 }
 
