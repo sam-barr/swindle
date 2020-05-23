@@ -388,6 +388,17 @@ unsafe fn cg_compexp(builder: &mut Builder, compexp: CompExp<PCG>) -> LLVMValueR
                 nm!(""),
             )
         }
+        CompExp::Comp(CompOp::Eq(SwindleType::List(_)), addexp1, addexp2) => {
+            let addexp1 = cg_addexp(builder, *addexp1);
+            let addexp2 = cg_addexp(builder, *addexp2);
+            LLVMBuildCall(
+                builder.builder,
+                LLVMGetNamedFunction(builder.module, nm!("listeq")),
+                [addexp1, addexp2].as_mut_ptr(),
+                2,
+                nm!(""),
+            )
+        }
         CompExp::Comp(op, addexp1, addexp2) => {
             let addexp1 = cg_addexp(builder, *addexp1);
             let addexp2 = cg_addexp(builder, *addexp2);

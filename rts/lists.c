@@ -6,6 +6,7 @@
 
 #include "rc.h"
 #include "lists.h"
+#include "strings.h"
 
 #define GROW_CAPACITY(capacity) (2 * (capacity))
 #define MIN_CAPACITY 8
@@ -166,4 +167,43 @@ RC *get_setter_(RC *l, int64_t idx) {
     // but may as well throw it in
 
     return ((RC *)list->items) + idx;
+}
+
+bool listeq(RC *l1, RC *l2) {
+    List *list1 = (List *)l1->reference,
+         *list2 = (List *)l2->reference;
+    assert(list1->item_type == list2->item_type);
+    // should be caught by type checker
+
+    if(list1->length != list2->length) {
+        destroy_noref(l1);
+        destroy_noref(l2);
+        return false;
+    } else if(list1->item_type == SW_UNIT) {
+        // unit lists are equal iff the lengths are equal
+        destroy_noref(l1);
+        destroy_noref(l2);
+        return true; 
+    }
+
+    alloc(l1);
+    alloc(l2); // index_list will try to destroy them otherwise
+    bool equal = true;
+    for(int64_t i = 0; i < (int64_t)list1->length; i++) {
+        ListItem item1 = index_list(l1, i),
+                 item2 = index_list(l2, i);
+        switch(list1->item_type) {
+            case SW_INT: equal &= item1.n == item2.n; break;
+            case SW_BOOL: equal &= item1.b == item2.b; break;
+            case SW_STRING: equal &= streq(item1.rc, item2.rc); break;
+            case SW_LIST: equal &= listeq(item1.rc, item2.rc); break;
+        }
+
+        if(!equal) break;
+    }
+
+    drop(l1);
+    drop(l2);
+
+    return equal;
 }
