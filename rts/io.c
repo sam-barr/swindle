@@ -33,13 +33,13 @@ void print_list(RC *l) {
         ListItem item = index_list(l, i);
         switch(list->item_type) {
             case SW_INT:
-                print_int(as_int(item));
+                print_int(item.n);
                 break;
             case SW_BOOL:
-                print_bool(as_bool(item));
+                print_bool(item.b);
                 break;
             case SW_UNIT:
-                print_unit(as_unit(item));
+                print_unit(item.u);
                 break;
             case SW_STRING:
                 print_string(as_rc(item));

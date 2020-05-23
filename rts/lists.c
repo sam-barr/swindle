@@ -154,7 +154,7 @@ void set_varargs_(RC *l, int64_t idx, va_list ap) {
         case SW_STRING:
         case SW_LIST:
             drop(((RC *)list->items) + idx);
-            ((RC *)list->items)[idx] = *va_arg(ap, RC *);
+            ((RC *)list->items)[idx] = *alloc(va_arg(ap, RC *));
             break;
     }
 }

@@ -307,20 +307,10 @@ unsafe fn cg_expression(builder: &mut Builder, expression: Expression<PCG>) -> L
             LLVMBuildStore(builder.builder, expression, var);
             expression
         }
-        Expression::Assign(typ, box LValue::Index(lvalue, index), expression) => {
+        Expression::Assign(_, box LValue::Index(lvalue, index), expression) => {
             let lvalue = cg_lvalue(builder, *lvalue);
             let index = cg_expression(builder, *index);
-            let expression = if let SwindleType::List(_) | SwindleType::String = typ {
-                LLVMBuildCall(
-                    builder.builder,
-                    LLVMGetNamedFunction(builder.module, nm!("alloc")),
-                    [cg_expression(builder, *expression)].as_mut_ptr(),
-                    1,
-                    nm!("rc"),
-                )
-            } else {
-                cg_expression(builder, *expression)
-            };
+            let expression = cg_expression(builder, *expression);
             LLVMBuildCall(
                 builder.builder,
                 LLVMGetNamedFunction(builder.module, nm!("set_")),
