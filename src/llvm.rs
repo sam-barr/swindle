@@ -39,6 +39,7 @@ unsafe fn load_rts_source(context: LLVMContextRef, code: &[u8]) -> LLVMModuleRef
     module
 }
 
+#[derive(Clone)]
 struct Builder {
     context: LLVMContextRef,
     builder: LLVMBuilderRef,
@@ -472,7 +473,7 @@ unsafe fn cg_primary(builder: &mut Builder, primary: Primary<PCG>) -> LLVMValueR
             LLVMBuildLoad(builder.builder, builder.variables[id], nm!("variable"))
         }
         Primary::IfExp(ifexp) => cg_ifexp(builder, ifexp),
-        Primary::WhileExp(whileexp) => cg_whileexp(builder, whileexp),
+        Primary::ForExp(forexp) => cg_forexp(builder, forexp),
         Primary::StatementExp(body) => cg_body(builder, body),
         Primary::Index(SwindleType::String, string, index) => {
             let string = cg_primary(builder, *string);
@@ -547,6 +548,8 @@ unsafe fn cg_primary(builder: &mut Builder, primary: Primary<PCG>) -> LLVMValueR
             );
             rc
         }
+        Primary::Function(_) => unimplemented!(),
+        Primary::FunCall(_, _) => unimplemented!(),
         Primary::Unit => builder.unit(),
     }
 }
@@ -598,7 +601,7 @@ unsafe fn cg_builtin(builder: &mut Builder, builtin: Builtin<PCG>) -> LLVMValueR
     }
 }
 
-unsafe fn cg_whileexp(builder: &mut Builder, whileexp: WhileExp<PCG>) -> LLVMValueRef {
+unsafe fn cg_forexp(builder: &mut Builder, forexp: ForExp<PCG>) -> LLVMValueRef {
     let old_break_bb = builder.break_bb;
     let old_continue_bb = builder.break_bb;
 
@@ -616,7 +619,7 @@ unsafe fn cg_whileexp(builder: &mut Builder, whileexp: WhileExp<PCG>) -> LLVMVal
     // initialize list
     let item_type = LLVMConstInt(
         LLVMInt32TypeInContext(builder.context),
-        match whileexp.tag {
+        match forexp.tag {
             SwindleType::Int => 0,     // SW_INT
             SwindleType::Bool => 1,    // SW_BOOL
             SwindleType::Unit => 2,    // SW_UNIT
@@ -637,19 +640,21 @@ unsafe fn cg_whileexp(builder: &mut Builder, whileexp: WhileExp<PCG>) -> LLVMVal
         3,
         nm!(""),
     );
+    cg_statement(builder, *forexp.init);
     LLVMBuildBr(builder.builder, start);
     LLVMPositionBuilderAtEnd(builder.builder, start);
 
-    let cond = cg_expression(builder, *whileexp.cond);
+    let cond = cg_expression(builder, *forexp.cond);
     LLVMBuildCondBr(builder.builder, cond, then, otherwise);
     LLVMPositionBuilderAtEnd(builder.builder, then);
     LLVMBuildCall(
         builder.builder,
         LLVMGetNamedFunction(builder.module, nm!("push_")),
-        [rc, cg_body(builder, whileexp.body)].as_mut_ptr(),
+        [rc, cg_body(builder, forexp.body)].as_mut_ptr(),
         2,
         nm!(""),
     );
+    cg_expression(builder, *forexp.update);
     LLVMBuildBr(builder.builder, start);
 
     LLVMPositionBuilderAtEnd(builder.builder, otherwise);

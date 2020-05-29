@@ -31,6 +31,16 @@ Type: Type = {
     "bool" => Type::Bool,
     "unit" => Type::Unit,
     "[" <typ:Type> "]" => Type::List(Box::new(typ)),
+    <ret:Type> "fn" "(" <args:Types> ")" => Type::Fn(Box::new(ret), args),
+}
+
+Types: Vec<Type> = {
+    <t:Type> => vec![t],
+    <mut types:Types> "," <t:Type> => {
+        types.push(t);
+        types
+    },
+    => Vec::new(),
 }
 
 Expression: Expression<Parsed> = {
@@ -63,10 +73,7 @@ CompExp: CompExp<Parsed> = {
     <a1:AddExp> "==" <a2:AddExp> => CompExp::Comp(CompOp::Eq(()), Box::new(a1), Box::new(a2)),
     <a1:AddExp> "!=" <a2:AddExp> => {
         let eq = CompExp::Comp(CompOp::Eq(()), Box::new(a1), Box::new(a2));
-        let and = AndExp::CompExp(Box::new(eq));
-        let or = OrExp::AndExp(Box::new(and));
-        let expression = Expression::OrExp(Box::new(or));
-        let paren = Primary::Paren(Box::new(expression));
+        let paren = Primary::Paren(Box::new(eq.to_expression()));
         let unary = Unary::Primary(Box::new(paren));
         let not = Unary::Not(Box::new(unary));
         let mul = MulExp::Unary(Box::new(not));
@@ -113,9 +120,7 @@ Primary: Primary<Parsed> = {
     "unit" => Primary::Unit,
     "true" => Primary::BoolLit(true),
     "false" => Primary::BoolLit(false),
-    "while" <cond:Expression> <body:Body> => {
-        Primary::WhileExp(WhileExp { tag: (), cond: Box::new(cond), body })
-    },
+    <luup:Loop> => Primary::ForExp(luup),
     "if" <cond:Expression> <body:Body> <elifs:Elif*> <els:Els> => {
         Primary::IfExp(
             IfExp {
@@ -132,6 +137,51 @@ Primary: Primary<Parsed> = {
     "[" <t:Type> ";" <args:Args> "]" => Primary::List(t, args),
     "[" <t:Type> "]" => Primary::List(t, Vec::new()),
     <b:Builtin> "(" <args:Args> ")" => Primary::Builtin((b, args)),
+    <f:Function> => Primary::Function(f),
+    <p:Primary> "(" <args:Args> ")" => Primary::FunCall(Box::new(p), args),
+}
+
+Function: Function<Parsed> = {
+    "fn" "(" <params:Params> ")" <body:Body> => Function { params, body },
+}
+
+Params: Vec<(Type, String)> = {
+    <t:Type> <v:Variable> => vec![(t, v)],
+    <mut params:Params> "," <t:Type> <v:Variable> => {
+        params.push((t,v));
+        params
+    },
+    => Vec::new(),
+}
+
+Loop: ForExp<Parsed> = {
+    "while" <cond:Expression> <body:Body> => {
+        ForExp {
+            tag: (),
+            init: Box::new(Primary::Unit.to_statement()),
+            cond: Box::new(cond),
+            update: Box::new(Primary::Unit.to_expression()),
+            body
+        }
+    },
+    "for" <init:Statement> ";" <cond:Expression> ";" <update:Expression> <body:Body> => {
+        ForExp {
+            tag: (),
+            init: Box::new(init),
+            cond: Box::new(cond),
+            update: Box::new(update),
+            body
+        }
+    },
+    "loop" <body:Body> => {
+        ForExp {
+            tag: (),
+            init: Box::new(Primary::Unit.to_statement()),
+            cond: Box::new(Primary::BoolLit(true).to_expression()),
+            update: Box::new(Primary::Unit.to_expression()),
+            body
+        }
+    }
 }
 
 Args: Vec<Expression<Parsed>> = {

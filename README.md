@@ -7,11 +7,9 @@ A statically typed, expression based imperative language which compiles to LLVM.
 The following is fizzbuzz written in "idiomatic" swindle:
 
 ```
-int x = 1;
-
-while x <= 100 {
-    bool three = x % 3 == 0;
-    bool five  = x % 5 == 0;
+for int i = 1; i <= 100; i = i + 1 {
+    bool three = i % 3 == 0;
+    bool five  = i % 5 == 0;
 
     if three or five {
         @writeln(
@@ -19,10 +17,7 @@ while x <= 100 {
             if five  { "buzz"; } else { ""; }
         );
     } else {
-        @writeln(x);
+        @writeln(i);
     };
-
-    x = x + 1;
-    unit;
 };
 ```

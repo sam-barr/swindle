@@ -6,9 +6,8 @@ let b:current_syntax = "swindle"
 
 syntax keyword swindleKeyword and or not
 syntax keyword swindleKeyword if else elif
-syntax keyword swindleKeyword while break continue
-syntax keyword swindleKeyword int string bool unit
-syntax keyword swindleKeyword write writeln
+syntax keyword swindleKeyword while break continue for loop
+syntax keyword swindleKeyword int string bool unit fn
 highlight link swindleKeyword Keyword
 
 syntax keyword swindleBoolean true false

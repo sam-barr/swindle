@@ -3,7 +3,7 @@ use crate::error::*;
 use std::collections::HashMap;
 use std::default::Default;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Typed {}
 
 impl Tag for Typed {
@@ -15,7 +15,7 @@ impl Tag for Typed {
     type BuiltinID = Builtin<Typed>;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Builtin<T>
 where
     T: Tag,
@@ -139,6 +139,7 @@ fn type_to_swindle_type(typ: Type) -> SwindleType {
         Type::Bool => SwindleType::Bool,
         Type::Unit => SwindleType::Unit,
         Type::List(typ) => SwindleType::List(Box::new(type_to_swindle_type(*typ))),
+        Type::Fn(_, _) => unimplemented!("{:?}", typ),
     }
 }
 
@@ -184,30 +185,37 @@ fn type_lvalue(
     }
 }
 
-fn type_whileexp(
+fn type_forexp(
     state: &mut TyperState,
-    whileexp: WhileExp<Parsed>,
-) -> TyperResult<(WhileExp<Typed>, SwindleType)> {
-    let cond = match type_expression(state, *whileexp.cond) {
-        Ok((cond, SwindleType::Bool)) => cond,
+    forexp: ForExp<Parsed>,
+) -> TyperResult<(ForExp<Typed>, SwindleType)> {
+    let init = match type_statement(state, *forexp.init) {
+        Ok((init, _)) => Box::new(init),
         Err(e) => return Err(e),
-        _ => {
-            return throw_error(
-                "while condition must be a bool".to_string(),
-                state.file_posn,
-            )
-        }
     };
 
-    let (body, body_ty) = match type_body(state, whileexp.body) {
+    let cond = match type_expression(state, *forexp.cond) {
+        Ok((cond, SwindleType::Bool)) => cond,
+        Err(e) => return Err(e),
+        _ => return throw_error("loop condition must be a bool".to_string(), state.file_posn),
+    };
+
+    let update = match type_expression(state, *forexp.update) {
+        Ok((update, _)) => update,
+        Err(e) => return Err(e),
+    };
+
+    let (body, body_ty) = match type_body(state, forexp.body) {
         Ok(res) => res,
         Err(e) => return Err(e),
     };
 
     Ok((
-        WhileExp {
+        ForExp {
             tag: body_ty.clone(),
+            init,
             cond,
+            update,
             body,
         },
         SwindleType::List(Box::new(body_ty)),
@@ -485,11 +493,10 @@ fn type_primary(
         Primary::IfExp(ifexp) => {
             type_ifexp(state, ifexp).map(|(i, t)| (Box::new(Primary::IfExp(i)), t))
         }
-        Primary::WhileExp(whileexp) => {
+        Primary::ForExp(forexp) => {
             let was_in_loop = state.in_loop;
             state.in_loop = true;
-            let result =
-                type_whileexp(state, whileexp).map(|(i, t)| (Box::new(Primary::WhileExp(i)), t));
+            let result = type_forexp(state, forexp).map(|(i, t)| (Box::new(Primary::ForExp(i)), t));
             state.in_loop = was_in_loop;
             result
         }
@@ -541,6 +548,8 @@ fn type_primary(
                 SwindleType::List(Box::new(typ)),
             ))
         }
+        Primary::Function(_) => unimplemented!(),
+        Primary::FunCall(_, _) => unimplemented!(),
     }
 }
 

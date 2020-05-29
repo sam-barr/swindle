@@ -2,7 +2,7 @@ use crate::ast::*;
 use crate::typechecker::*;
 use std::collections::HashMap;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PCG {}
 
 impl Tag for PCG {
@@ -193,8 +193,8 @@ fn preprocess_primary(state: &mut PCGState, primary: Primary<Typed>) -> Primary<
         Primary::BoolLit(b) => Primary::BoolLit(b),
         Primary::Variable(v) => Primary::Variable(state.get_variable(v)),
         Primary::IfExp(ifexp) => Primary::IfExp(preprocess_ifexp(state, ifexp)),
-        Primary::WhileExp(whileexp) => Primary::WhileExp(preprocess_whileexp(state, whileexp)),
-        Primary::StatementExp(body) => Primary::StatementExp(preprocess_body(state, body, true)),
+        Primary::ForExp(forexp) => Primary::ForExp(preprocess_forexp(state, forexp)),
+        Primary::StatementExp(body) => Primary::StatementExp(preprocess_body(state, body)),
         Primary::Index(typ, list, index) => Primary::Index(
             typ,
             Box::new(preprocess_primary(state, *list)),
@@ -208,6 +208,8 @@ fn preprocess_primary(state: &mut PCGState, primary: Primary<Typed>) -> Primary<
             }
             Primary::List(typ, new_items)
         }
+        Primary::Function(_) => unimplemented!(),
+        Primary::FunCall(_, _) => unimplemented!(),
         Primary::Unit => Primary::Unit,
     }
 }
@@ -225,22 +227,30 @@ fn preprocess_builtin(state: &mut PCGState, builtin: Builtin<Typed>) -> Builtin<
     }
 }
 
-fn preprocess_whileexp(state: &mut PCGState, whileexp: WhileExp<Typed>) -> WhileExp<PCG> {
-    let tag = whileexp.tag;
-    let cond = preprocess_expression(state, *whileexp.cond);
-    let body = preprocess_body(state, whileexp.body, false);
-    WhileExp { tag, cond, body }
+fn preprocess_forexp(state: &mut PCGState, forexp: ForExp<Typed>) -> ForExp<PCG> {
+    let tag = forexp.tag;
+    let init = Box::new(preprocess_statement(state, *forexp.init));
+    let cond = preprocess_expression(state, *forexp.cond);
+    let update = preprocess_expression(state, *forexp.update);
+    let body = preprocess_body(state, forexp.body);
+    ForExp {
+        tag,
+        init,
+        cond,
+        update,
+        body,
+    }
 }
 
 fn preprocess_ifexp(state: &mut PCGState, ifexp: IfExp<Typed>) -> IfExp<PCG> {
     let tag = ifexp.tag;
     let cond = preprocess_expression(state, *ifexp.cond);
-    let body = preprocess_body(state, ifexp.body, true);
+    let body = preprocess_body(state, ifexp.body);
     let mut elifs = Vec::new();
     for elif in ifexp.elifs {
         elifs.push(preprocess_elif(state, elif));
     }
-    let els = preprocess_body(state, ifexp.els, true);
+    let els = preprocess_body(state, ifexp.els);
     IfExp {
         tag,
         cond,
@@ -253,11 +263,11 @@ fn preprocess_ifexp(state: &mut PCGState, ifexp: IfExp<Typed>) -> IfExp<PCG> {
 fn preprocess_elif(state: &mut PCGState, elif: Elif<Typed>) -> Elif<PCG> {
     Elif {
         cond: preprocess_expression(state, *elif.cond),
-        body: preprocess_body(state, elif.body, true),
+        body: preprocess_body(state, elif.body),
     }
 }
 
-fn preprocess_body(state: &mut PCGState, body: Body<Typed>, last_used: bool) -> Body<PCG> {
+fn preprocess_body(state: &mut PCGState, body: Body<Typed>) -> Body<PCG> {
     let mut statements = Vec::new();
     for tagged_stmt in body.statements {
         statements.push(TaggedStatement::new(
@@ -267,7 +277,7 @@ fn preprocess_body(state: &mut PCGState, body: Body<Typed>, last_used: bool) -> 
     }
 
     if let Some(tagged_stmt) = statements.last_mut() {
-        tagged_stmt.tag &= !last_used;
+        tagged_stmt.tag &= true;
     }
 
     Body { statements }
